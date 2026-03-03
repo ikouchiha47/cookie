@@ -1,0 +1,66 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cookie"
+version = "0.1.0"
+description = "Real-time cooking guidance system"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "websockets>=12.0",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "imagehash>=4.3",
+    "pyyaml>=6.0",
+    "structlog>=23.0",
+    "python-dotenv>=1.2.2",
+    "dspy>=2.6",
+]
+
+[project.optional-dependencies]
+edge = [
+    "opencv-python-headless>=4.8",
+    "pyaudio>=0.2.13",
+    "webrtcvad>=2.0.10",
+    "piper-tts>=1.2",
+]
+server = [
+    "ultralytics>=8.0",          # YOLO
+    "transformers>=4.40",        # CLIP, vision models
+    "torch>=2.0",
+    "openai>=1.0",               # litellm backend
+    "faster-whisper>=1.0",
+]
+harness = [
+    "yt-dlp>=2024.0",
+    "ffmpeg-python>=0.2",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+cookie-server = "cookie.server:main"
+cookie-edge = "cookie.edge.client:main"
+cookie-harness = "cookie.harness.runner:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cookie"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]

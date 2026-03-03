@@ -1,0 +1,48 @@
+# Cookie - Cooking Guide System Configuration
+
+server:
+  host: "0.0.0.0"
+  port: 8420
+  max_sessions: 4
+
+edge:
+  camera:
+    fps: 3
+    resolution: [640, 480]
+    jpeg_quality: 80
+  audio:
+    sample_rate: 16000
+    chunk_seconds: 5
+    vad_aggressiveness: 2  # 0-3, higher = more aggressive filtering
+  frame_sampling:
+    phash_threshold: 12      # hamming distance to consider "changed"
+    min_interval_ms: 200     # never send faster than this
+
+models:
+  reasoning: xai/grok-3-mini
+  vision: xai/grok-4-fast-non-reasoning
+  stt:
+    provider: faster-whisper
+    model: base
+  tts:
+    provider: piper
+    model: en_US-lessac-medium
+
+perception:
+  clip:
+    model: ViT-B/32
+    similarity_threshold: 0.85   # below this = scene change
+    embedding_history: 10        # keep last N embeddings
+  composite:
+    fast_every_frame: true
+    deep_on_state_change: true
+    deep_on_uncertainty: 0.6     # confidence threshold
+
+reasoning:
+  heartbeat_seconds: 30
+  max_context_actions: 3         # last N actions sent to LLM
+  max_keyframes: 3               # max frames attached per LLM call
+
+safety:
+  always_check_quantities: true
+  allergen_checking: true
