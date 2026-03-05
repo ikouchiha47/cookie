@@ -8,11 +8,62 @@ The server can be run using `uv run cookie-server`.
 
 ## Mobile Application
 
-To host the mobile application locally and connect it to the server:
+To run the mobile application locally:
 
-1. Ensure your mobile device and the server are on the same network.
-2. Update the `.env.local` file in the `mobile/` directory with the local IP address of your machine where the server is running.
-   Alternatively, you can handle the server address configuration within the mobile application's settings.
+1. Install dependencies:
+   ```bash
+   cd mobile
+   npm install
+   ```
+2. Ensure your mobile device and the server are on the same network.
+3. Set the server URL — create `mobile/.env.local` and add:
+   ```
+   EXPO_PUBLIC_WS_URL=ws://<your-machine-ip>:8420/ws
+   ```
+   Alternatively, you can change the server address inside the app's settings at runtime.
+4. Start the Expo dev server:
+   ```bash
+   npx expo start
+   ```
+5. Scan the QR code with the Expo Go app on your device, or press `i` for iOS simulator / `a` for Android emulator.
+
+## Testing Without a Device
+
+### Replay a cooking video
+
+The harness downloads a YouTube video and drives the full server pipeline offline — no camera or mobile app needed:
+
+```bash
+uv run cookie-harness --url "https://www.youtube.com/watch?v=<id>"
+```
+
+It extracts frames at 3fps, runs them through perception + reasoning, and prints guidance output for each frame.
+
+### Send screenshots in batch (test chat / vision)
+
+With the server running, send base64-encoded images directly over WebSocket to test the chat and discovery endpoints:
+
+```python
+import asyncio, base64, json, pathlib, websockets
+
+async def test():
+    async with websockets.connect("ws://localhost:8420/ws") as ws:
+        images = [pathlib.Path(p).read_bytes() for p in ["frame1.jpg", "frame2.jpg"]]
+        payload = {
+            "type": "chat",
+            "payload": {
+                "text": "What can I make with these ingredients?",
+                "image_bytes_list": [base64.b64encode(img).decode() for img in images],
+            },
+            "timestamp": 0,
+        }
+        await ws.send(json.dumps(payload))
+        print(json.loads(await ws.recv()))
+
+asyncio.run(test())
+```
+
+Use `"image_bytes"` (single string) instead of `"image_bytes_list"` for a single image.
 
 ## Character System (Mobile)
 
