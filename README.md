@@ -28,7 +28,6 @@ The `mobile/src/characters/CHARACTERS.md` document provides a detailed guide on 
 
 ## Screenshots
 
-<h3>Bot Screen</h3>
-<img src="screenshots/botscreen.jpeg" alt="Bot Screen" width="320">
-<h3>Chat Screen</h3>
-<img src="screenshots/chatscreen.jpeg" alt="Chat Screen" width="320">
+| Bot Screen | Chat Screen |
+|:---:|:---:|
+| <img src="screenshots/botscreen.jpeg" alt="Bot Screen" width="320"> | <img src="screenshots/chatscreen.jpeg" alt="Chat Screen" width="320"> |
