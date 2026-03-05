@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -72,6 +72,11 @@ class UserInterrupt(BaseModel):
 class GuidanceMessage(BaseModel):
     text: str
     severity: Severity = Severity.INFO
+    expression: Literal[
+        "default", "idle", "happy", "confused", "sad",
+        "angry", "embarrassed", "wink", "concerned", "excited",
+        "other",
+    ] = "default"
     tts_audio_bytes: bytes | None = None
 
 
@@ -179,6 +184,18 @@ class SessionState(BaseModel):
     user_profile: UserProfile = Field(default_factory=UserProfile)
 
 
+# --- Character State ---
+
+class CharacterState(BaseModel):
+    """Character emotional and physical state, driven by LLM reasoning."""
+    expression: Literal["happy", "thinking", "concerned", "alert", "sleeping", "neutral"] = "neutral"
+    antenna_light: Literal["idle", "thinking", "alert", "error"] = "idle"
+    emotion: Literal["excited", "focused", "worried", "confused", "neutral"] = "neutral"
+    arm_pose: Literal["neutral", "pointing", "wave", "celebrate"] = "neutral"
+    arm_left_rotation: float = 0   # degrees, clamped -30 to 30
+    arm_right_rotation: float = 0  # degrees, clamped -30 to 30
+
+
 # --- Reasoning Output ---
 
 class ReasoningOutput(BaseModel):
@@ -188,6 +205,7 @@ class ReasoningOutput(BaseModel):
     step_progress: str = "in_progress"
     ask_user: dict[str, str] | None = None
     safety_flag: dict[str, str] | None = None
+    character_state: CharacterState = Field(default_factory=CharacterState)
 
 
 # --- Config ---
@@ -199,6 +217,31 @@ class ModelConfig(BaseModel):
 
 
 # --- Transport envelope ---
+
+class RecipeSuggestion(BaseModel):
+    name: str
+    description: str
+    confidence: str = "medium"  # high | medium | low
+
+
+class DiscoveryMessage(BaseModel):
+    items: list[str]
+    suggestions: list[RecipeSuggestion]
+
+
+class ChatMessage(BaseModel):
+    text: str
+    image_bytes: str | None = None  # single JPEG as base64 string
+    image_bytes_list: list[str] | None = None  # multiple JPEGs as base64 strings
+
+
+class ChatResponse(BaseModel):
+    text: str
+    items: list[str] = Field(default_factory=list)
+    suggestions: list[RecipeSuggestion] = Field(default_factory=list)
+    character_state: CharacterState | None = None
+    recipe_plan: RecipePlan | None = None
+
 
 class Envelope(BaseModel):
     """Wire format wrapping any message type."""

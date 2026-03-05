@@ -21,6 +21,7 @@ edge:
 models:
   reasoning: xai/grok-3-mini
   vision: xai/grok-4-fast-non-reasoning
+  router: xai/grok-4-fast-non-reasoning
   stt:
     provider: faster-whisper
     model: base

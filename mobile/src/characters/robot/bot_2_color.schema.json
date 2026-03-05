@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "1.0",
+  "characterId": "robot",
+  "svgFile": "bot_2_color.svg",
+  "viewBox": "0 0 132.60208 167.63483",
+  "rootTransform": "translate(374.65544,-78.890901)",
+  "controls": {
+    "brows": {
+      "left": {
+        "pivot": {
+          "x": 47.79,
+          "y": 45.31
+        },
+        "range": {
+          "min": -35,
+          "max": 35
+        },
+        "restAngle": 0
+      },
+      "right": {
+        "pivot": {
+          "x": 84.83,
+          "y": 45.31
+        },
+        "range": {
+          "min": -35,
+          "max": 35
+        },
+        "restAngle": 0
+      }
+    },
+    "eyes": {
+      "left": {
+        "anchor": {
+          "x": 43.6,
+          "y": 57.91
+        },
+        "rx": 6.17,
+        "ry": 7.87,
+        "opennessRange": {
+          "min": 0.1,
+          "max": 1.3
+        },
+        "lookXRange": {
+          "min": -3,
+          "max": 3
+        },
+        "lookYRange": {
+          "min": -3,
+          "max": 3
+        }
+      },
+      "right": {
+        "anchor": {
+          "x": 89.01,
+          "y": 57.91
+        },
+        "rx": 6.17,
+        "ry": 7.87,
+        "opennessRange": {
+          "min": 0.1,
+          "max": 1.3
+        },
+        "lookXRange": {
+          "min": -3,
+          "max": 3
+        },
+        "lookYRange": {
+          "min": -3,
+          "max": 3
+        }
+      }
+    },
+    "mouth": {
+      "x1": 66.09,
+      "x2": 74.32,
+      "y": 78.26,
+      "controlX": 70.21,
+      "controlY_rest": 78.26,
+      "controlY_min": 65.26,
+      "controlY_max": 84.26
+    },
+    "signal": {
+      "orbCenter": {
+        "x": 76.36,
+        "y": 6.43
+      },
+      "glowRange": {
+        "min": 0,
+        "max": 15
+      },
+      "colors": {
+        "idle": "#3a3d4a",
+        "thinking": "#F5A623",
+        "alert": "#E05040",
+        "error": "#FF0000"
+      }
+    }
+  }
+}

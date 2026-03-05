@@ -1,0 +1,77 @@
+import type { ExpressionMap } from "../protocol";
+
+export const ROBOT_EXPRESSIONS: ExpressionMap = {
+  default: {                   // Friendly waiting — slight smile, full eyes, side-to-side look
+    eyeOpenness: 1,
+    eyeRightOpenness: 1,
+    mouthCurve: 0.5,
+    mouthOpen: 0.2,
+    antennaLight: "idle",
+  },
+  idle: {                      // Neutral / unimpressed
+    eyeOpenness: 0.28,
+    eyeRightOpenness: 0.28,
+    mouthCurve: 0,
+    antennaLight: "idle",
+  },
+  happy: {                     // Delighted
+    eyeOpenness: 1,
+    eyeRightOpenness: 1,
+    mouthCurve: 1,
+    mouthOpen: 0.15,
+    antennaLight: "idle",
+  },
+  confused: {                  // Confused — one eye squinting
+    eyeOpenness: 1,
+    eyeRightOpenness: 0.3,
+    mouthCurve: -0.25,
+    antennaLight: "idle",
+  },
+  sad: {                       // Sad
+    eyeOpenness: 0.55,
+    eyeRightOpenness: 0.55,
+    eyeLookY: 0.4,
+    mouthCurve: -0.85,
+    tearDrop: true,
+    antennaLight: "idle",
+  },
+  angry: {                     // Furious
+    eyeOpenness: 0.45,
+    eyeRightOpenness: 0.45,
+    mouthCurve: -0.9,
+    screenTint: "#2a0a0a",
+    antennaLight: "alert",
+    pulseSpeed: 1.5,
+  },
+  embarrassed: {               // Blushing
+    eyeOpenness: 0.75,
+    eyeRightOpenness: 0.75,
+    mouthCurve: 0.7,
+    blush: true,
+    antennaLight: "idle",
+  },
+  wink: {                      // Cool wink
+    eyeOpenness: 1,
+    eyeRightOpenness: 0.04,
+    mouthCurve: 0.55,
+    antennaLight: "idle",
+  },
+  concerned: {                 // Worried / alert — covers both warning and critical
+    eyeOpenness: 0.75,
+    eyeRightOpenness: 0.75,
+    mouthOpen: 0.4,
+    mouthCurve: -0.3,
+    antennaLight: "alert",
+    pulseSpeed: 1.5,
+    screenTint: "#1a0a05",
+  },
+  excited: {                   // Thrilled
+    eyeOpenness: 1,
+    eyeRightOpenness: 1,
+    mouthCurve: 1,
+    mouthOpen: 0.35,
+    heartFloat: true,
+    antennaLight: "excited",
+    pulseSpeed: 0.8,
+  },
+};

@@ -11,15 +11,20 @@ from pydantic import BaseModel
 # --- Reasoning output schema ---
 
 class SafetyFlag(BaseModel):
-    level: str  # "warning" | "critical"
+    level: Literal["warning", "critical"]
     message: str
 
 
 class GuidanceOutput(BaseModel):
     guidance: str
-    severity: str = "info"  # "info" | "warning" | "critical"
+    severity: Literal["info", "warning", "critical"] = "info"
+    expression: Literal[
+        "default", "idle", "happy", "confused", "sad",
+        "angry", "embarrassed", "wink", "concerned", "excited",
+        "other"  # fallback — app treats "other" as "default"
+    ] = "default"
     state_updates: dict[str, str] = {}
-    step_progress: str = "in_progress"  # "in_progress" | "done" | "error"
+    step_progress: Literal["in_progress", "done", "error"] = "in_progress"
     safety_flag: SafetyFlag | None = None
 
 
@@ -66,6 +71,56 @@ class DescribeFrame(dspy.Signature):
     actions: list[str] = dspy.OutputField(desc="Actions being performed")
     state: str = dspy.OutputField(desc="Overall state of the cooking")
     concerns: list[str] = dspy.OutputField(desc="Any safety concerns or deviations")
+
+
+class DiscoverIngredients(dspy.Signature):
+    """You are looking at a kitchen scene through a camera. Identify all visible
+    ingredients and items, then suggest 2-3 recipes the user could make with them.
+    Be practical — only list what you can actually see."""
+
+    image: dspy.Image = dspy.InputField(desc="Current camera frame")
+    user_hint: str = dspy.InputField(
+        desc="Optional user message like 'I want to make pasta'", default=""
+    )
+
+    items: list[str] = dspy.OutputField(desc="Ingredients/items visible in the scene")
+    suggestions: list[dict] = dspy.OutputField(
+        desc="2-3 recipe suggestions, each with: name, description, confidence (high/medium/low)"
+    )
+
+
+class RouteSession(dspy.Signature):
+    """Decide the current session mode based on conversation history and state.
+    Return 'discovery' when the user has no active recipe and is exploring,
+    or 'cooking' when they have selected a recipe and are following steps."""
+
+    has_recipe_plan: bool = dspy.InputField(desc="Whether a recipe plan is currently active")
+    recent_transcript: str = dspy.InputField(desc="Last few user/system messages")
+    discovered_items: list[str] = dspy.InputField(desc="Items found so far via discovery")
+
+    mode: str = dspy.OutputField(desc="'discovery' or 'cooking'")
+    reason: str = dspy.OutputField(desc="Brief reason for the routing decision")
+
+
+class RecipeSuggestionOutput(BaseModel):
+    name: str
+    description: str
+    confidence: Literal["high", "medium", "low"] = "medium"
+
+
+class ChatWithKitchen(dspy.Signature):
+    """You are a cooking assistant chatting with a user. They may send one or more
+    images of their kitchen, ingredients, or dishes. Respond helpfully — identify
+    what you see across all images, answer questions, suggest recipes, or give
+    cooking advice. Keep it conversational and concise."""
+
+    message: str = dspy.InputField(desc="User's chat message")
+    images: list[dspy.Image] = dspy.InputField(desc="Images from user (may be empty)")
+    history: str = dspy.InputField(desc="Recent conversation history")
+
+    reply: str = dspy.OutputField(desc="Your response to the user")
+    items: list[str] = dspy.OutputField(desc="Ingredients/items identified across all images")
+    suggestions: list[RecipeSuggestionOutput] = dspy.OutputField(desc="Recipe suggestions if relevant")
 
 
 class GenerateRecipe(dspy.Signature):

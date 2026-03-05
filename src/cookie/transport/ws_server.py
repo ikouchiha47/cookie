@@ -11,6 +11,8 @@ from websockets.asyncio.server import Server, ServerConnection
 
 from cookie.models import (
     AudioMessage,
+    ChatResponse,
+    DiscoveryMessage,
     Envelope,
     FrameMessage,
     GuidanceMessage,
@@ -42,6 +44,18 @@ class ClientSession:
 
     async def send_query(self, msg: QueryMessage):
         envelope = Envelope(type="query", payload=msg.model_dump())
+        await self.ws.send(envelope.model_dump_json())
+
+    async def send_thinking(self):
+        envelope = Envelope(type="thinking", payload={})
+        await self.ws.send(envelope.model_dump_json())
+
+    async def send_discovery(self, msg: DiscoveryMessage):
+        envelope = Envelope(type="discovery", payload=msg.model_dump())
+        await self.ws.send(envelope.model_dump_json())
+
+    async def send_chat_response(self, msg: ChatResponse):
+        envelope = Envelope(type="chat_response", payload=msg.model_dump())
         await self.ws.send(envelope.model_dump_json())
 
 
