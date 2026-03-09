@@ -1,22 +1,31 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
-import { CameraView } from "expo-camera";
+import { Camera, useCameraFormat, type CameraDevice } from "react-native-vision-camera";
 import { useSessionStore } from "../stores/session";
 
 interface Props {
-  cameraRef: React.RefObject<CameraView | null>;
+  cameraRef: React.RefObject<Camera | null>;
+  device: CameraDevice;
 }
 
-export function CameraIndicator({ cameraRef }: Props) {
+export function CameraIndicator({ cameraRef, device }: Props) {
   const isCameraActive = useSessionStore((s) => s.isCameraActive);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
+  // Pick a 720p-ish format so takeSnapshot captures at real resolution, not view size
+  const format = useCameraFormat(device, [{ videoResolution: { width: 1280, height: 720 } }]);
 
   if (!isCameraActive) return null;
 
   return (
     <View style={styles.container}>
       <View style={styles.preview}>
-        <CameraView ref={cameraRef} style={styles.camera} facing="back" />
+        <Camera
+          ref={cameraRef}
+          style={styles.camera}
+          device={device}
+          isActive={isCameraActive}
+          format={format}
+        />
       </View>
       <View
         style={[
@@ -35,8 +44,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   preview: {
-    width: 40,
-    height: 40,
+    width: 80,
+    height: 60,
     borderRadius: 8,
     overflow: "hidden",
     borderWidth: 1,

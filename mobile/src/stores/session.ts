@@ -1,6 +1,8 @@
 /** Zustand store — single source of truth for the session */
 
 import { create } from "zustand";
+import { upsertSessionDebounced, loadLatestIncompleteSession, markSessionDone } from "../services/sessionDb";
+import type { RecipePlan as RecipePlanType } from "../types/protocol";
 import type {
   ChatResponse,
   DiscoveryMessage,
@@ -11,14 +13,10 @@ import type {
   StepStatus,
   UserProfile,
 } from "../types/protocol";
+import type { ExpressionName } from "../characters/protocol";
 
-// --- Character expressions ---
-// Must stay in sync with ExpressionName in src/characters/protocol.ts
-
-export type Expression =
-  | "default" | "idle" | "happy" | "confused"
-  | "sad" | "angry" | "embarrassed" | "wink"
-  | "concerned" | "excited";
+// Re-export so components don't need to import from two places
+export type Expression = ExpressionName;
 
 export interface CheckpointItem {
   id: string;
@@ -52,6 +50,8 @@ export interface SessionStore {
   isActive: boolean;
   startSession: () => void;
   endSession: () => void;
+  initFromDb: () => Promise<{ resumed: boolean; sessionId: string | null }>;
+  persistSession: () => void;
 
   // Character
   expression: Expression;
@@ -66,6 +66,17 @@ export interface SessionStore {
   stepTimerStart: number | null;
   setRecipePlan: (plan: RecipePlan) => void;
   updateStep: (index: number, status: StepStatus) => void;
+
+  // Phase / vigilance (sent to server with every frame — client is source of truth)
+  phase: "discovery" | "cooking" | "paused";
+  currentStep: number;
+  stepInstruction: string;
+  expectedVisualState: string;
+  watchFor: string;
+  criticality: "low" | "medium" | "high";
+  setPhase: (p: "discovery" | "cooking" | "paused") => void;
+  setVigilance: (watchFor: string, criticality: "low" | "medium" | "high") => void;
+  setCurrentStep: (step: number, instruction: string, expectedVisualState: string) => void;
 
   // Discovery
   discoveredItems: string[];
@@ -138,8 +149,61 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       discoveredItems: [],
       recipeSuggestions: [],
       expression: "default",
+      phase: "discovery",
+      currentStep: 0,
+      stepInstruction: "",
+      expectedVisualState: "",
+      watchFor: "",
+      criticality: "medium",
     }),
-  endSession: () => set({ isActive: false }),
+  endSession: () => {
+    const { sessionId } = get();
+    if (sessionId) markSessionDone(sessionId).catch(() => {});
+    set({ isActive: false, phase: "discovery" });
+  },
+
+  initFromDb: async () => {
+    const row = await loadLatestIncompleteSession();
+    if (!row) return { resumed: false, sessionId: null };
+
+    const recipePlan = row.recipe_plan_json ? JSON.parse(row.recipe_plan_json) : null;
+    const discoveredItems = JSON.parse(row.discovered_items_json ?? "[]");
+
+    set({
+      sessionId: row.session_id,
+      sessionStartedAt: row.started_at,
+      isActive: false, // user must explicitly resume
+      phase: row.phase as any,
+      currentStep: row.current_step,
+      stepInstruction: row.step_instruction,
+      expectedVisualState: row.expected_visual_state,
+      watchFor: row.watch_for,
+      criticality: row.criticality as any,
+      recipePlan,
+      discoveredItems,
+      expression: "default",
+    });
+
+    return { resumed: true, sessionId: row.session_id };
+  },
+
+  persistSession: () => {
+    const s = get();
+    if (!s.sessionId) return;
+    upsertSessionDebounced({
+      session_id: s.sessionId,
+      phase: s.phase,
+      started_at: s.sessionStartedAt ?? Date.now(),
+      recipe_title: s.recipePlan?.title ?? "",
+      recipe_plan_json: s.recipePlan ? JSON.stringify(s.recipePlan) : null,
+      current_step: s.currentStep,
+      step_instruction: s.stepInstruction,
+      expected_visual_state: s.expectedVisualState,
+      watch_for: s.watchFor,
+      criticality: s.criticality,
+      discovered_items_json: JSON.stringify(s.discoveredItems),
+    });
+  },
 
   // Character
   expression: "default" as Expression,
@@ -152,7 +216,19 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   currentStepIndex: 0,
   stepStatuses: {},
   stepTimerStart: null,
-  setRecipePlan: (plan) => set({ recipePlan: plan }),
+  setRecipePlan: (plan) => {
+    const first = plan.steps[0];
+    set({
+      recipePlan: plan,
+      phase: "cooking",
+      currentStep: 0,
+      stepInstruction: first?.instruction ?? "",
+      expectedVisualState: first?.expected_visual_state ?? "",
+      watchFor: "",
+      criticality: "medium",
+    });
+    get().persistSession();
+  },
   updateStep: (index, status) => {
     const prev = get().stepStatuses;
     const newStatuses = { ...prev, [index]: status };
@@ -163,16 +239,37 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       updates.stepTimerStart = Date.now();
     }
     if (status === "done") {
-      // Auto-advance
       const plan = get().recipePlan;
       if (plan && index + 1 < plan.steps.length) {
+        const next = plan.steps[index + 1];
         updates.currentStepIndex = index + 1;
+        updates.currentStep = index + 1;
+        updates.stepInstruction = next.instruction;
+        updates.expectedVisualState = next.expected_visual_state ?? "";
+        updates.watchFor = "";
+        updates.criticality = "medium";
         updates.stepTimerStart = Date.now();
         newStatuses[index + 1] = "active";
       }
     }
     set(updates);
+    get().persistSession();
   },
+
+  // Phase / vigilance
+  phase: "discovery",
+  currentStep: 0,
+  stepInstruction: "",
+  expectedVisualState: "",
+  watchFor: "",
+  criticality: "medium",
+  setPhase: (p) => set({ phase: p }),
+  setVigilance: (watchFor, criticality) => {
+    set({ watchFor, criticality });
+    get().persistSession();
+  },
+  setCurrentStep: (step, instruction, expectedVisualState) =>
+    set({ currentStep: step, stepInstruction: instruction, expectedVisualState }),
 
   // Discovery
   discoveredItems: [],
@@ -262,16 +359,18 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     })),
   setChatLoading: (v) => set({ chatLoading: v }),
   handleChatResponse: (msg) => {
-    set((s) => ({
-      chatMessages: s.chatMessages.map((m) =>
-        (m.status === "pending" || m.status === "failed") ? { ...m, status: "sent" } : m
-      ).concat([{ id: Date.now().toString(), role: "assistant", text: msg.text, status: "sent", suggestions: msg.suggestions?.length ? msg.suggestions : undefined }]),
-      chatLoading: false,
-      ...(msg.items.length > 0
-        ? { discoveredItems: msg.items, recipeSuggestions: msg.suggestions }
-        : {}),
-      ...(msg.recipe_plan ? { recipePlan: msg.recipe_plan } : {}),
-    }));
+    set((s) => {
+      const chatMessages = s.chatMessages
+        .map((m) => (m.status === "pending" || m.status === "failed") ? { ...m, status: "sent" as const } : m)
+        .concat([{ id: Date.now().toString(), role: "assistant" as const, text: msg.text, status: "sent" as const, suggestions: msg.suggestions?.length ? msg.suggestions : undefined }]);
+      return {
+        chatMessages,
+        chatLoading: false,
+        discoveredItems: msg.items.length > 0 ? msg.items : s.discoveredItems,
+        recipeSuggestions: msg.items.length > 0 ? msg.suggestions : s.recipeSuggestions,
+        recipePlan: msg.recipe_plan ?? s.recipePlan,
+      };
+    });
   },
 
   // Idle

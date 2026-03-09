@@ -49,10 +49,24 @@ class InterruptType(str, Enum):
 
 # --- Edge → Server Messages ---
 
+class SessionContext(BaseModel):
+    """Client-owned session state sent with every frame. Server is stateless."""
+    session_id: str = "default"
+    phase: Literal["discovery", "cooking", "paused"] = "discovery"
+    current_step: int = 0
+    step_instruction: str = ""
+    expected_visual_state: str = ""
+    watch_for: str = ""
+    criticality: Literal["low", "medium", "high"] = "medium"
+    recipe_title: str = ""
+    discovered_items: list[str] = Field(default_factory=list)
+
+
 class FrameMessage(BaseModel):
     timestamp: float = Field(default_factory=time.time)
     frame_bytes: bytes
     frame_hash: str
+    context: SessionContext = Field(default_factory=SessionContext)
 
 
 class AudioMessage(BaseModel):
@@ -227,6 +241,16 @@ class RecipeSuggestion(BaseModel):
 class DiscoveryMessage(BaseModel):
     items: list[str]
     suggestions: list[RecipeSuggestion]
+
+
+class CookingObservation(BaseModel):
+    """Server → client after each cooking-phase inference."""
+    observation: str
+    guidance: str = ""
+    watch_for: str = ""
+    criticality: Literal["low", "medium", "high"] = "medium"
+    step_complete: bool = False
+    expression: str = "neutral"
 
 
 class ChatMessage(BaseModel):

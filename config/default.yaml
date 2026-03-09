@@ -19,9 +19,9 @@ edge:
     min_interval_ms: 200     # never send faster than this
 
 models:
-  reasoning: xai/grok-3-mini
-  vision: xai/grok-4-fast-non-reasoning
-  router: xai/grok-4-fast-non-reasoning
+  reasoning: gemini/gemini-2.5-flash   # text reasoning, recipe gen, chat
+  vision: gemini/gemini-2.5-flash      # vision — flash handles images natively
+  router: gemini/gemini-2.5-flash      # session classification (fast + cheap)
   stt:
     provider: faster-whisper
     model: base

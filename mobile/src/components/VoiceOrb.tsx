@@ -1,5 +1,6 @@
 import React from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Animated, {
   useAnimatedStyle,
   withRepeat,
@@ -44,7 +45,11 @@ export function VoiceOrb({ onPressIn, onPressOut }: Props) {
   return (
     <Pressable onPressIn={onPressIn} onPressOut={onPressOut}>
       <Animated.View style={[styles.orb, { backgroundColor: color }, animatedStyle]}>
-        <Text style={styles.icon}>{isListening ? "\ud83c\udfa4" : isSpeaking ? "\ud83d\udd0a" : "\ud83c\udfa4"}</Text>
+        <Ionicons
+          name={isSpeaking ? "volume-high" : "mic"}
+          size={26}
+          color="white"
+        />
       </Animated.View>
     </Pressable>
   );
@@ -57,8 +62,5 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
-  },
-  icon: {
-    fontSize: 28,
   },
 });

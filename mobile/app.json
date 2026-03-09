@@ -15,18 +15,31 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Cookie uses your camera to watch your cooking and provide guidance.",
+        "NSCameraUsageDescription": "Cookie needs camera access to watch your cooking.",
         "NSMicrophoneUsageDescription": "Cookie uses your microphone for voice commands."
       }
     },
     "android": {
+      "minSdkVersion": 26,
       "adaptiveIcon": {
         "backgroundColor": "#1a1a2e",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["CAMERA", "RECORD_AUDIO"]
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "package": "com.anonymous.cookie"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -34,13 +47,19 @@
     "plugins": [
       "expo-router",
       [
-        "expo-camera",
-        { "cameraPermission": "Cookie needs camera access to watch your cooking." }
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Cookie needs camera access to watch your cooking.",
+          "enableFrameProcessors": true
+        }
       ],
       [
         "expo-av",
-        { "microphonePermission": "Cookie needs microphone access for voice commands." }
-      ]
+        {
+          "microphonePermission": "Cookie needs microphone access for voice commands."
+        }
+      ],
+      "expo-sqlite"
     ]
   }
 }

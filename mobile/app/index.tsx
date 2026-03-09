@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useCameraPermissions, CameraView } from "expo-camera";
+import { Camera, useCameraPermission, useCameraDevice } from "react-native-vision-camera";
 import { CharacterFace } from "../src/components/character/CharacterFace";
 import { CameraIndicator } from "../src/components/CameraIndicator";
 import { CurrentStep } from "../src/components/CurrentStep";
@@ -18,8 +18,9 @@ import { useSessionStore } from "../src/stores/session";
 const IDLE_TIMEOUT_MS = 60_000;
 
 export default function MainScreen() {
-  const cameraRef = useRef<CameraView>(null);
-  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<Camera>(null);
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const device = useCameraDevice("back");
 
   const isActive = useSessionStore((s) => s.isActive);
   const expression = useSessionStore((s) => s.expression);
@@ -33,8 +34,8 @@ export default function MainScreen() {
   const recipeSuggestions = useSessionStore((s) => s.recipeSuggestions);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
 
+  const { startSampling, stopSampling } = useCamera(cameraRef);
   const { send } = useWebSocket();
-  useCamera(cameraRef);
   const { startRecording, stopAndSend } = useAudio();
   const { speak, stop: stopSpeech } = useSpeech();
 
@@ -59,18 +60,20 @@ export default function MainScreen() {
 
   const handleToggleSession = useCallback(async () => {
     if (isActive) {
+      stopSampling();
       endSession();
       setCameraActive(false);
       stopSpeech();
       return;
     }
-    if (!permission?.granted) {
-      const result = await requestPermission();
-      if (!result.granted) return;
+    if (!hasPermission) {
+      const granted = await requestPermission();
+      if (!granted) return;
     }
     startSession();
     setCameraActive(true);
-  }, [isActive, permission, requestPermission, startSession, endSession, setCameraActive, stopSpeech]);
+    startSampling();
+  }, [isActive, hasPermission, requestPermission, startSession, endSession, setCameraActive, stopSpeech, startSampling]);
 
   const statusColor =
     connectionStatus === "connected" ? "#22c55e" :
@@ -83,7 +86,7 @@ export default function MainScreen() {
     <SafeAreaView style={styles.container}>
       {/* Top bar — minimal */}
       <View style={styles.topBar}>
-        <CameraIndicator cameraRef={cameraRef} />
+        {device && <CameraIndicator cameraRef={cameraRef} device={device} />}
         <View style={styles.topBarRight}>
           <Ionicons name={statusIcon as any} size={18} color={statusColor} />
           <Pressable onPress={() => router.push("/chat")} style={styles.iconBtn}>

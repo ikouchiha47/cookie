@@ -14,6 +14,7 @@ export function useWebSocket() {
   const updateStep = useSessionStore((s) => s.updateStep);
   const setRecipePlan = useSessionStore((s) => s.setRecipePlan);
   const setExpression = useSessionStore((s) => s.setExpression);
+  const setVigilance = useSessionStore((s) => s.setVigilance);
   const isActive = useSessionStore((s) => s.isActive);
   const started = useRef(false);
 
@@ -53,6 +54,12 @@ export function useWebSocket() {
         case "chat_response": {
           const msg = envelope.payload as unknown as ChatResponse;
           handleChatResponse(msg);
+          break;
+        }
+        case "cooking_observation": {
+          const obs = envelope.payload as { watch_for: string; criticality: "low" | "medium" | "high"; expression?: string };
+          setVigilance(obs.watch_for ?? "", obs.criticality ?? "medium");
+          if (obs.expression) setExpression(obs.expression as any);
           break;
         }
         case "thinking": {

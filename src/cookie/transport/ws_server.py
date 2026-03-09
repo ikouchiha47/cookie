@@ -12,6 +12,7 @@ from websockets.asyncio.server import Server, ServerConnection
 from cookie.models import (
     AudioMessage,
     ChatResponse,
+    CookingObservation,
     DiscoveryMessage,
     Envelope,
     FrameMessage,
@@ -34,29 +35,36 @@ class ClientSession:
         self.ws = ws
         self.session_id = session_id
 
+    async def _send(self, envelope: Envelope):
+        data = envelope.model_dump_json()
+        log.info("← [%s] type=%s size=%d bytes", self.session_id, envelope.type, len(data))
+        await self.ws.send(data)
+
     async def send_guidance(self, msg: GuidanceMessage):
-        envelope = Envelope(type="guidance", payload=msg.model_dump())
-        await self.ws.send(envelope.model_dump_json())
+        await self._send(Envelope(type="guidance", payload=msg.model_dump()))
 
     async def send_step_update(self, msg: StepUpdate):
-        envelope = Envelope(type="step_update", payload=msg.model_dump())
-        await self.ws.send(envelope.model_dump_json())
+        await self._send(Envelope(type="step_update", payload=msg.model_dump()))
 
     async def send_query(self, msg: QueryMessage):
-        envelope = Envelope(type="query", payload=msg.model_dump())
-        await self.ws.send(envelope.model_dump_json())
+        await self._send(Envelope(type="query", payload=msg.model_dump()))
 
     async def send_thinking(self):
-        envelope = Envelope(type="thinking", payload={})
-        await self.ws.send(envelope.model_dump_json())
+        await self._send(Envelope(type="thinking", payload={}))
 
     async def send_discovery(self, msg: DiscoveryMessage):
-        envelope = Envelope(type="discovery", payload=msg.model_dump())
-        await self.ws.send(envelope.model_dump_json())
+        log.info("← [%s] discovery: items=%s", self.session_id, msg.items)
+        await self._send(Envelope(type="discovery", payload=msg.model_dump()))
+
+    async def send_cooking_observation(self, msg: CookingObservation):
+        await self._send(Envelope(type="cooking_observation", payload=msg.model_dump()))
 
     async def send_chat_response(self, msg: ChatResponse):
-        envelope = Envelope(type="chat_response", payload=msg.model_dump())
-        await self.ws.send(envelope.model_dump_json())
+        await self._send(Envelope(type="chat_response", payload=msg.model_dump()))
+
+
+ConnectHandler = Callable[["ClientSession"], Coroutine[Any, Any, None]]
+DisconnectHandler = Callable[["ClientSession"], Coroutine[Any, Any, None]]
 
 
 class TransportServer:
@@ -65,8 +73,16 @@ class TransportServer:
         self.port = port
         self.sessions: dict[str, ClientSession] = {}
         self._handlers: dict[str, MessageHandler] = {}
+        self._connect_handler: ConnectHandler | None = None
+        self._disconnect_handler: DisconnectHandler | None = None
         self._server: Server | None = None
         self._next_session_id = 0
+
+    def on_connect(self, handler: ConnectHandler):
+        self._connect_handler = handler
+
+    def on_disconnect(self, handler: DisconnectHandler):
+        self._disconnect_handler = handler
 
     def on_message(self, msg_type: str, handler: MessageHandler):
         """Register a handler for a message type."""
@@ -78,11 +94,15 @@ class TransportServer:
         session = ClientSession(ws, session_id)
         self.sessions[session_id] = session
         log.info("Client connected: %s", session_id)
+        if self._connect_handler:
+            await self._connect_handler(session)
 
         try:
             async for raw in ws:
                 try:
                     envelope = Envelope.model_validate_json(raw)
+                    size = len(raw)
+                    log.info("→ [%s] type=%s size=%d bytes", session.session_id, envelope.type, size)
                     handler = self._handlers.get(envelope.type)
                     if handler:
                         await handler(envelope.type, envelope.payload, session)
@@ -91,6 +111,8 @@ class TransportServer:
                 except Exception:
                     log.exception("Error processing message")
         finally:
+            if self._disconnect_handler:
+                await self._disconnect_handler(session)
             del self.sessions[session_id]
             log.info("Client disconnected: %s", session_id)
 

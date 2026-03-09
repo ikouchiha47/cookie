@@ -26,10 +26,15 @@ class RecipeGenerator:
 
             steps = []
             for s in result.steps:
+                raw_qty = s.get("quantities") or {}
+                quantities = {
+                    k: str(v) if not isinstance(v, str) else v
+                    for k, v in raw_qty.items()
+                }
                 steps.append(RecipeStep(
                     index=s.get("index", len(steps)),
                     instruction=s.get("instruction", ""),
-                    quantities=s.get("quantities", {}),
+                    quantities=quantities,
                     duration_seconds=s.get("duration_seconds"),
                     expected_visual_state=s.get("expected_visual_state", ""),
                 ))

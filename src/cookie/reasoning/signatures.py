@@ -123,6 +123,45 @@ class ChatWithKitchen(dspy.Signature):
     suggestions: list[RecipeSuggestionOutput] = dspy.OutputField(desc="Recipe suggestions if relevant")
 
 
+class ObserveCooking(dspy.Signature):
+    """Watch a cooking scene and determine what's happening, what guidance to give,
+    and how urgently to check again. Only provide guidance if something needs to be said —
+    stay silent during normal progress."""
+
+    image: dspy.Image = dspy.InputField(desc="Current camera frame")
+    recipe_title: str = dspy.InputField(desc="Recipe being cooked")
+    step_instruction: str = dspy.InputField(desc="Current step the user is on")
+    expected_visual_state: str = dspy.InputField(desc="What the camera should show when this step is done")
+    watch_for: str = dspy.InputField(desc="Specific visual transition to detect")
+
+    observation: str = dspy.OutputField(desc="Brief description of what you see")
+    guidance: str = dspy.OutputField(desc="Guidance to speak aloud — empty string if nothing to say")
+    watch_for_next: str = dspy.OutputField(desc="What visual change to watch for next")
+    criticality: str = dspy.OutputField(desc="How urgently to check again: low (30s) / medium (10s) / high (3s)")
+    step_complete: bool = dspy.OutputField(desc="True if this step appears visually complete")
+    expression: str = dspy.OutputField(
+        desc="Character expression to show: default / idle / happy / confused / sad / angry / embarrassed / wink / concerned / excited"
+    )
+
+
+class ClassifyVoiceIntent(dspy.Signature):
+    """Classify what the user wants based on their speech while cooking.
+    They may be giving navigation commands, asking questions, or selecting a recipe."""
+
+    transcript: str = dspy.InputField(desc="What the user said")
+    phase: str = dspy.InputField(desc="Current phase: discovery or cooking")
+    current_step: int = dspy.InputField(desc="Current recipe step index")
+
+    intent: str = dspy.OutputField(
+        desc="One of: next_step, prev_step, repeat_step, select_recipe, "
+             "custom_recipe, acknowledge, question, give_up, add_item, wake_word, unknown"
+    )
+    target: str = dspy.OutputField(
+        desc="For select_recipe: recipe name. For question: the question text. Otherwise empty."
+    )
+    confidence: str = dspy.OutputField(desc="high / medium / low")
+
+
 class GenerateRecipe(dspy.Signature):
     """Generate a detailed structured cooking recipe plan."""
 

@@ -1,79 +1,74 @@
 /**
- * Perceptual hash frame sampler — mirrors edge/frame_sampler.py.
+ * Frame change detector.
  *
- * Since we can't run DCT on device easily, we use a simplified average hash:
- * resize to 8x8 greyscale, threshold at mean → 64-bit hash.
- * Hamming distance comparison for change detection.
+ * JPEG base64 has a ~1000-char header that's always identical.
+ * We skip it and split the remaining content into 4 regions,
+ * hashing each independently. If ANY region changes by more than
+ * the threshold, we consider the frame different enough to send.
  */
 
-const HASH_SIZE = 8;
+const JPEG_HEADER_B64_LEN = 1000; // ~750 bytes of JPEG header in base64
+
+function hashRegion(s: string, start: number, end: number): number {
+  let h = 0x811c9dc5; // FNV-1a init
+  const step = Math.max(1, Math.floor((end - start) / 128));
+  for (let i = start; i < end; i += step) {
+    h ^= s.charCodeAt(i);
+    h = (Math.imul(h, 0x01000193)) >>> 0; // FNV prime, keep 32-bit
+  }
+  return h;
+}
 
 export class FrameSampler {
-  private phashThreshold: number;
   private minIntervalMs: number;
-  private lastHash: string | null = null;
+  private changeThreshold: number; // 0–1, fraction of regions that must change
+  private lastHashes: number[] | null = null;
   private lastSendTime = 0;
 
   constructor(config?: { phash_threshold?: number; min_interval_ms?: number }) {
-    this.phashThreshold = config?.phash_threshold ?? 12;
     this.minIntervalMs = config?.min_interval_ms ?? 200;
+    // phash_threshold repurposed: number of regions (out of 4) that must change
+    this.changeThreshold = Math.min(4, config?.phash_threshold ?? 1);
   }
 
-  /**
-   * Compute a simple average hash from raw RGBA pixel data.
-   * Expects pixels from a small (32x32 or similar) greyscale-ready source.
-   * For the mobile app, we pass the base64 JPEG directly and skip client-side hashing
-   * in favor of a timestamp + size-based dedup (the server does its own phash).
-   *
-   * This simplified version uses frame byte length as a rough proxy.
-   */
-  computeSimpleHash(base64Data: string): string {
-    // Use a simple hash of the base64 length + sample bytes
-    let hash = 0;
-    const sample = base64Data.substring(0, 128);
-    for (let i = 0; i < sample.length; i++) {
-      hash = ((hash << 5) - hash + sample.charCodeAt(i)) | 0;
-    }
-    return Math.abs(hash).toString(16).padStart(16, "0");
+  private computeHashes(b64: string): number[] {
+    const start = Math.min(JPEG_HEADER_B64_LEN, Math.floor(b64.length * 0.15));
+    const content = b64.length - start;
+    if (content <= 0) return [hashRegion(b64, 0, b64.length)];
+    const regionSize = Math.floor(content / 4);
+    return [0, 1, 2, 3].map((i) =>
+      hashRegion(b64, start + i * regionSize, start + (i + 1) * regionSize)
+    );
   }
 
-  hammingDistance(a: string, b: string): number {
-    let dist = 0;
-    const len = Math.min(a.length, b.length);
-    for (let i = 0; i < len; i++) {
-      if (a[i] !== b[i]) dist++;
-    }
-    return dist + Math.abs(a.length - b.length);
-  }
-
-  shouldSend(base64Frame: string): { send: boolean; hash: string } {
-    const hash = this.computeSimpleHash(base64Frame);
+  shouldSend(b64: string): { send: boolean; hash: string } {
     const now = Date.now();
-    const elapsed = now - this.lastSendTime;
+    const hashes = this.computeHashes(b64);
+    const hash = hashes.map((h) => h.toString(16).padStart(8, "0")).join("");
 
-    if (elapsed < this.minIntervalMs) {
+    if (now - this.lastSendTime < this.minIntervalMs) {
       return { send: false, hash };
     }
 
-    if (this.lastHash === null) {
-      this.lastHash = hash;
+    if (!this.lastHashes) {
+      this.lastHashes = hashes;
       this.lastSendTime = now;
       return { send: true, hash };
     }
 
-    const distance = this.hammingDistance(this.lastHash, hash);
-    if (distance >= this.phashThreshold) {
-      this.lastHash = hash;
+    const changedRegions = hashes.filter((h, i) => h !== this.lastHashes![i]).length;
+    const changed = changedRegions >= this.changeThreshold;
+
+    if (changed) {
+      this.lastHashes = hashes;
       this.lastSendTime = now;
-      return { send: true, hash };
     }
 
-    return { send: false, hash };
+    return { send: changed, hash };
   }
 
-  /** Force-send next frame (e.g. after reconnect) */
   reset(): void {
-    this.lastHash = null;
+    this.lastHashes = null;
     this.lastSendTime = 0;
   }
 }
