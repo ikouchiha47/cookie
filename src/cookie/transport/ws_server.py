@@ -2,24 +2,21 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Callable, Coroutine
 
 import websockets
 from websockets.asyncio.server import Server, ServerConnection
+from websockets.exceptions import ConnectionClosed
 
 from cookie.models import (
-    AudioMessage,
     ChatResponse,
     CookingObservation,
     DiscoveryMessage,
     Envelope,
-    FrameMessage,
     GuidanceMessage,
     QueryMessage,
     StepUpdate,
-    UserInterrupt,
 )
 
 log = logging.getLogger(__name__)
@@ -108,8 +105,12 @@ class TransportServer:
                         await handler(envelope.type, envelope.payload, session)
                     else:
                         log.warning("No handler for message type: %s", envelope.type)
+                except ConnectionClosed:
+                    break
                 except Exception:
                     log.exception("Error processing message")
+        except ConnectionClosed:
+            pass  # clean or unclean disconnect — not an error
         finally:
             if self._disconnect_handler:
                 await self._disconnect_handler(session)

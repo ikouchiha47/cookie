@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import io
 import logging
 from functools import partial
 from typing import Any
@@ -22,11 +21,8 @@ from cookie.models import (
     ChatMessage,
     ChatResponse,
     FrameMessage,
-    GuidanceMessage,
     RecipePlan,
     RecipeSuggestion,
-    SessionContext,
-    Severity,
 )
 from cookie.reasoning.router import ModelRouter
 from cookie.reasoning.signatures import (

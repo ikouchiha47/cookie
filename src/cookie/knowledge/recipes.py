@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 import dspy
 
@@ -26,17 +25,16 @@ class RecipeGenerator:
 
             steps = []
             for s in result.steps:
-                raw_qty = s.get("quantities") or {}
                 quantities = {
                     k: str(v) if not isinstance(v, str) else v
-                    for k, v in raw_qty.items()
+                    for k, v in (s.quantities or {}).items()
                 }
                 steps.append(RecipeStep(
-                    index=s.get("index", len(steps)),
-                    instruction=s.get("instruction", ""),
+                    index=s.index if s.index is not None else len(steps),
+                    instruction=s.instruction,
                     quantities=quantities,
-                    duration_seconds=s.get("duration_seconds"),
-                    expected_visual_state=s.get("expected_visual_state", ""),
+                    duration_seconds=s.duration_seconds,
+                    expected_visual_state=s.expected_visual_state,
                 ))
 
             return RecipePlan(

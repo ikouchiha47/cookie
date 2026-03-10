@@ -38,8 +38,6 @@ class AudioPerceptor:
         return None
 
     def _transcribe_faster_whisper(self, audio_bytes: bytes) -> SpeechEvent | None:
-        import io
-        import tempfile
 
         import numpy as np
 

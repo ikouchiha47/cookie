@@ -68,13 +68,13 @@ export interface SessionStore {
   updateStep: (index: number, status: StepStatus) => void;
 
   // Phase / vigilance (sent to server with every frame — client is source of truth)
-  phase: "discovery" | "cooking" | "paused";
+  phase: "discovery" | "cooking" | "paused" | "done";
   currentStep: number;
   stepInstruction: string;
   expectedVisualState: string;
   watchFor: string;
   criticality: "low" | "medium" | "high";
-  setPhase: (p: "discovery" | "cooking" | "paused") => void;
+  setPhase: (p: "discovery" | "cooking" | "paused" | "done") => void;
   setVigilance: (watchFor: string, criticality: "low" | "medium" | "high") => void;
   setCurrentStep: (step: number, instruction: string, expectedVisualState: string) => void;
 
@@ -159,7 +159,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   endSession: () => {
     const { sessionId } = get();
     if (sessionId) markSessionDone(sessionId).catch(() => {});
-    set({ isActive: false, phase: "discovery" });
+    set({ isActive: false, phase: "done" });
   },
 
   initFromDb: async () => {
@@ -363,13 +363,31 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const chatMessages = s.chatMessages
         .map((m) => (m.status === "pending" || m.status === "failed") ? { ...m, status: "sent" as const } : m)
         .concat([{ id: Date.now().toString(), role: "assistant" as const, text: msg.text, status: "sent" as const, suggestions: msg.suggestions?.length ? msg.suggestions : undefined }]);
-      return {
+
+      const newPlan = msg.recipe_plan ?? null;
+      const base = {
         chatMessages,
         chatLoading: false,
         discoveredItems: msg.items.length > 0 ? msg.items : s.discoveredItems,
         recipeSuggestions: msg.items.length > 0 ? msg.suggestions : s.recipeSuggestions,
-        recipePlan: msg.recipe_plan ?? s.recipePlan,
       };
+
+      if (newPlan && !s.recipePlan) {
+        const first = newPlan.steps[0];
+        return {
+          ...base,
+          recipePlan: newPlan,
+          phase: "cooking" as const,
+          currentStep: 0,
+          currentStepIndex: 0,
+          stepInstruction: first?.instruction ?? "",
+          expectedVisualState: first?.expected_visual_state ?? "",
+          watchFor: "",
+          criticality: "medium" as const,
+        };
+      }
+
+      return { ...base, recipePlan: newPlan ?? s.recipePlan };
     });
   },
 

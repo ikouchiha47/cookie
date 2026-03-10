@@ -1,14 +1,14 @@
-import React, { useRef, useEffect, useCallback } from "react";
-import { View, StyleSheet, Pressable, Text } from "react-native";
+import React, { useRef, useEffect, useCallback, useState } from "react";
+import { View, StyleSheet, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Camera, useCameraPermission, useCameraDevice } from "react-native-vision-camera";
 import { CharacterFace } from "../src/components/character/CharacterFace";
 import { CameraIndicator } from "../src/components/CameraIndicator";
-import { CurrentStep } from "../src/components/CurrentStep";
-import { CheckpointLog } from "../src/components/CheckpointLog";
-import { VoiceOrb } from "../src/components/VoiceOrb";
+import { DiscoveryPanel } from "../src/components/DiscoveryPanel";
+import { CookingPanel } from "../src/components/CookingPanel";
+import { DonePanel } from "../src/components/DonePanel";
 import { useWebSocket } from "../src/hooks/useWebSocket";
 import { useCamera } from "../src/hooks/useCamera";
 import { useAudio } from "../src/hooks/useAudio";
@@ -21,12 +21,14 @@ export default function MainScreen() {
   const cameraRef = useRef<Camera>(null);
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("back");
+  const [isAutoScanning, setIsAutoScanning] = useState(false);
 
+  const phase = useSessionStore((s) => s.phase);
   const isActive = useSessionStore((s) => s.isActive);
-  const expression = useSessionStore((s) => s.expression);
   const setExpression = useSessionStore((s) => s.setExpression);
   const startSession = useSessionStore((s) => s.startSession);
   const endSession = useSessionStore((s) => s.endSession);
+  const setPhase = useSessionStore((s) => s.setPhase);
   const setCameraActive = useSessionStore((s) => s.setCameraActive);
   const lastActivityAt = useSessionStore((s) => s.lastActivityAt);
   const latestGuidance = useSessionStore((s) => s.latestGuidance);
@@ -34,66 +36,109 @@ export default function MainScreen() {
   const recipeSuggestions = useSessionStore((s) => s.recipeSuggestions);
   const connectionStatus = useSessionStore((s) => s.connectionStatus);
 
-  const { startSampling, stopSampling } = useCamera(cameraRef);
-  const { send } = useWebSocket();
+  const { scanNow, startCookingSampling, stopCookingSampling, scheduleAutoScan, stopAutoScan } = useCamera(cameraRef);
+  useWebSocket();
   const { startRecording, stopAndSend } = useAudio();
   const { speak, stop: stopSpeech } = useSpeech();
 
+  // speak guidance only during cooking
   useEffect(() => {
+    if (phase !== "cooking") return;
     if (latestGuidance?.text) speak(latestGuidance.text);
   }, [latestGuidance]);
 
+  // speak discovery results only during discovery
   useEffect(() => {
+    if (phase !== "discovery") return;
     if (discoveredItems.length === 0) return;
     const itemsList = discoveredItems.join(", ");
     const top = recipeSuggestions[0]?.name;
     speak(top ? `I can see ${itemsList}. How about making ${top}?` : `I can see ${itemsList}.`);
   }, [discoveredItems]);
 
+  // idle detection
   useEffect(() => {
     if (!isActive) return;
     const interval = setInterval(() => {
-      if (Date.now() - lastActivityAt > IDLE_TIMEOUT_MS) setExpression("sleeping");
+      if (Date.now() - lastActivityAt > IDLE_TIMEOUT_MS) setExpression("idle");
     }, 5000);
     return () => clearInterval(interval);
   }, [isActive, lastActivityAt, setExpression]);
 
-  const handleToggleSession = useCallback(async () => {
-    if (isActive) {
-      stopSampling();
-      endSession();
-      setCameraActive(false);
-      stopSpeech();
+  // sampling control based on phase
+  useEffect(() => {
+    if (!isActive) {
+      stopCookingSampling();
+      stopAutoScan();
+      setIsAutoScanning(false);
       return;
     }
-    if (!hasPermission) {
-      const granted = await requestPermission();
-      if (!granted) return;
+    if (phase === "cooking") {
+      stopAutoScan();
+      setIsAutoScanning(false);
+      startCookingSampling();
+    } else if (phase === "discovery") {
+      stopCookingSampling();
+      scheduleAutoScan();
+      setIsAutoScanning(true);
+    } else {
+      // paused or done
+      stopCookingSampling();
+      stopAutoScan();
+      setIsAutoScanning(false);
     }
+  }, [phase, isActive]);
+
+  const ensurePermission = useCallback(async () => {
+    if (hasPermission) return true;
+    return requestPermission();
+  }, [hasPermission, requestPermission]);
+
+  const handleScan = useCallback(async () => {
+    const ok = await ensurePermission();
+    if (!ok) return;
+    if (!isActive) {
+      startSession();
+      setCameraActive(true);
+    }
+    await scanNow();
+  }, [isActive, ensurePermission, startSession, setCameraActive, scanNow]);
+
+  const handleStopScan = useCallback(() => {
+    stopAutoScan();
+    setIsAutoScanning(false);
+  }, [stopAutoScan]);
+
+  const handleAddIngredients = useCallback(() => {
+    setPhase("discovery");
+  }, [setPhase]);
+
+  const handleFinish = useCallback(() => {
+    stopCookingSampling();
+    stopAutoScan();
+    stopSpeech();
+    endSession();
+  }, [stopCookingSampling, stopAutoScan, stopSpeech, endSession]);
+
+  const handleStartNew = useCallback(() => {
+    stopSpeech();
+    endSession();
     startSession();
     setCameraActive(true);
-    startSampling();
-  }, [isActive, hasPermission, requestPermission, startSession, endSession, setCameraActive, stopSpeech, startSampling]);
+  }, [stopSpeech, endSession, startSession, setCameraActive]);
 
   const statusColor =
     connectionStatus === "connected" ? "#22c55e" :
     connectionStatus === "connecting" ? "#eab308" : "#ef4444";
-  const statusIcon =
-    connectionStatus === "connected" ? "wifi" :
-    connectionStatus === "connecting" ? "wifi" : "wifi-outline";
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Top bar — minimal */}
       <View style={styles.topBar}>
         {device && <CameraIndicator cameraRef={cameraRef} device={device} />}
         <View style={styles.topBarRight}>
-          <Ionicons name={statusIcon as any} size={18} color={statusColor} />
+          <Ionicons name="wifi" size={18} color={statusColor} />
           <Pressable onPress={() => router.push("/chat")} style={styles.iconBtn}>
             <Ionicons name="chatbubble-outline" size={20} color="rgba(255,255,255,0.65)" />
-          </Pressable>
-          <Pressable onPress={() => router.push("/history")} style={styles.iconBtn}>
-            <Ionicons name="time-outline" size={20} color="rgba(255,255,255,0.65)" />
           </Pressable>
           <Pressable onPress={() => router.push("/settings")} style={styles.iconBtn}>
             <Ionicons name="settings-outline" size={20} color="rgba(255,255,255,0.65)" />
@@ -101,30 +146,29 @@ export default function MainScreen() {
         </View>
       </View>
 
-      {/* Character — hero of the screen, vertically centered in remaining space */}
       <View style={styles.heroArea}>
         <CharacterFace />
-        <CurrentStep />
       </View>
 
-      {/* Checkpoint log */}
-      <View style={styles.checkpoints}>
-        <CheckpointLog />
-      </View>
-
-      {/* Bottom bar */}
-      <View style={styles.bottomBar}>
-        {isActive && (
-          <VoiceOrb onPressIn={startRecording} onPressOut={stopAndSend} />
+      <View style={styles.phaseArea}>
+        {phase === "discovery" && (
+          <DiscoveryPanel
+            onScan={handleScan}
+            onStopScan={handleStopScan}
+            isAutoScanning={isAutoScanning}
+          />
         )}
-        <Pressable
-          style={[styles.sessionBtn, isActive && styles.sessionBtnActive]}
-          onPress={handleToggleSession}
-        >
-          <Text style={styles.sessionBtnText}>
-            {isActive ? "Stop Cooking" : "Start Cooking"}
-          </Text>
-        </Pressable>
+        {(phase === "cooking" || phase === "paused") && (
+          <CookingPanel
+            onAddIngredients={handleAddIngredients}
+            onFinish={handleFinish}
+            onVoicePressIn={startRecording}
+            onVoicePressOut={stopAndSend}
+          />
+        )}
+        {phase === "done" && (
+          <DonePanel onStartNew={handleStartNew} />
+        )}
       </View>
     </SafeAreaView>
   );
@@ -155,32 +199,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   heroArea: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 8,
   },
-  checkpoints: {
-    maxHeight: 120,
-  },
-  bottomBar: {
-    alignItems: "center",
+  phaseArea: {
+    flex: 1,
+    justifyContent: "flex-end",
     paddingBottom: 20,
-    gap: 12,
-  },
-  sessionBtn: {
-    backgroundColor: "#22c55e",
-    paddingHorizontal: 36,
-    paddingVertical: 14,
-    borderRadius: 28,
-  },
-  sessionBtnActive: {
-    backgroundColor: "#ef4444",
-  },
-  sessionBtnText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.3,
   },
 });

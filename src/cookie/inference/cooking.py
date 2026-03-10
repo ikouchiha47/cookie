@@ -9,7 +9,6 @@ import dspy
 from PIL import Image
 
 from cookie.models import CookingObservation, GuidanceMessage, SessionContext, Severity, StepUpdate, StepStatus
-from cookie.reasoning.signatures import ObserveCooking
 from cookie.transport.ws_server import ClientSession
 
 log = logging.getLogger(__name__)

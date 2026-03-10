@@ -1,7 +1,5 @@
 """DSPy signatures for the cooking guide system."""
 
-from __future__ import annotations
-
 from typing import Literal
 
 import dspy
@@ -9,6 +7,12 @@ from pydantic import BaseModel
 
 
 # --- Reasoning output schema ---
+
+class RecipeSuggestionOutput(BaseModel):
+    name: str
+    description: str
+    confidence: Literal["high", "medium", "low"] = "medium"
+
 
 class SafetyFlag(BaseModel):
     level: Literal["warning", "critical"]
@@ -83,9 +87,9 @@ class DiscoverIngredients(dspy.Signature):
         desc="Optional user message like 'I want to make pasta'", default=""
     )
 
-    items: list[str] = dspy.OutputField(desc="Ingredients/items visible in the scene")
-    suggestions: list[dict] = dspy.OutputField(
-        desc="2-3 recipe suggestions, each with: name, description, confidence (high/medium/low)"
+    ingredients: list[str] = dspy.OutputField(desc="Ingredients/items visible in the scene")
+    suggestions: list[RecipeSuggestionOutput] = dspy.OutputField(
+        desc="2-3 recipe suggestions"
     )
 
 
@@ -100,12 +104,6 @@ class RouteSession(dspy.Signature):
 
     mode: str = dspy.OutputField(desc="'discovery' or 'cooking'")
     reason: str = dspy.OutputField(desc="Brief reason for the routing decision")
-
-
-class RecipeSuggestionOutput(BaseModel):
-    name: str
-    description: str
-    confidence: Literal["high", "medium", "low"] = "medium"
 
 
 class ChatWithKitchen(dspy.Signature):
@@ -162,6 +160,15 @@ class ClassifyVoiceIntent(dspy.Signature):
     confidence: str = dspy.OutputField(desc="high / medium / low")
 
 
+class RecipeStepOutput(BaseModel):
+    index: int
+    instruction: str
+    quantities: dict[str, str] = {}
+    duration_seconds: int = 0
+    expected_visual_state: str = ""
+    common_mistakes: list[str] = []
+
+
 class GenerateRecipe(dspy.Signature):
     """Generate a detailed structured cooking recipe plan."""
 
@@ -170,7 +177,4 @@ class GenerateRecipe(dspy.Signature):
 
     title: str = dspy.OutputField()
     total_time_minutes: int = dspy.OutputField()
-    steps: list[dict] = dspy.OutputField(
-        desc="List of steps, each with: index, instruction, quantities (dict), "
-        "duration_seconds, expected_visual_state, common_mistakes (list of strings)"
-    )
+    steps: list[RecipeStepOutput] = dspy.OutputField(desc="Ordered list of recipe steps")

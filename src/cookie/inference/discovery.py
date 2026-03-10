@@ -8,8 +8,7 @@ import logging
 import dspy
 from PIL import Image
 
-from cookie.models import CookingObservation, DiscoveryMessage, RecipeSuggestion, SessionContext
-from cookie.reasoning.signatures import DiscoverIngredients
+from cookie.models import DiscoveryMessage, RecipeSuggestion, SessionContext
 from cookie.transport.ws_server import ClientSession
 
 log = logging.getLogger(__name__)
@@ -32,16 +31,16 @@ async def run_discovery(
         with dspy.context(lm=lm):
             result = discover_sig(image=image, user_hint="")
 
-        items = result.items or []
+        items = result.ingredients or []
         if not items:
             log.info("Discovery [%s]: nothing found", client.session_id)
             return
 
         suggestions = [
             RecipeSuggestion(
-                name=s.get("name", ""),
-                description=s.get("description", ""),
-                confidence=s.get("confidence", "medium"),
+                name=s.name,
+                description=s.description,
+                confidence=s.confidence,
             )
             for s in (result.suggestions or [])
         ]

@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import time
 from typing import Any
 
-import numpy as np
 import websockets
 
 from cookie.config import load_config
-from cookie.models import AudioMessage, Envelope, FrameMessage, GuidanceMessage, UserInterrupt
+from cookie.models import AudioMessage, Envelope, FrameMessage, GuidanceMessage
 
 from .audio_capture import AudioCapture
 from .frame_sampler import FrameSampler

@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from collections import deque
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
@@ -17,8 +15,6 @@ from cookie.models import (
     RecipePlan,
     SessionState,
     SpeechEvent,
-    Severity,
-    StepStatus,
     TranscriptEntry,
     UserProfile,
     VisualEvent,

@@ -10,8 +10,6 @@ from pathlib import Path
 from typing import Any
 
 import dspy
-import numpy as np
-from PIL import Image
 
 from cookie.config import init as config_init
 from cookie.knowledge.recipes import RecipeGenerator
