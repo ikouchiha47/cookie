@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, Pressable, TextInput, KeyboardAvoidingView, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { CurrentStep } from "./CurrentStep";
 import { CheckpointLog } from "./CheckpointLog";
@@ -11,20 +11,25 @@ interface Props {
   onFinish: () => void;
   onVoicePressIn: () => void;
   onVoicePressOut: () => void;
+  onPause: () => void;
+  onResume: () => void;
 }
 
-export function CookingPanel({ onAddIngredients, onFinish, onVoicePressIn, onVoicePressOut }: Props) {
+export function CookingPanel({ onAddIngredients, onFinish, onVoicePressIn, onVoicePressOut, onPause, onResume }: Props) {
   const phase = useSessionStore((s) => s.phase);
-  const setPhase = useSessionStore((s) => s.setPhase);
   const recipePlan = useSessionStore((s) => s.recipePlan);
   const currentStepIndex = useSessionStore((s) => s.currentStepIndex);
   const updateStep = useSessionStore((s) => s.updateStep);
+  const cookingNotes = useSessionStore((s) => s.cookingNotes);
+  const setCookingNotes = useSessionStore((s) => s.setCookingNotes);
+
+  const [showNotes, setShowNotes] = useState(false);
 
   const isPaused = phase === "paused";
   const totalSteps = recipePlan?.steps.length ?? 0;
   const isLastStep = currentStepIndex >= totalSteps - 1;
 
-  const togglePause = () => setPhase(isPaused ? "cooking" : "paused");
+  const togglePause = () => isPaused ? onResume() : onPause();
 
   const handleNext = () => {
     if (isLastStep) {
@@ -35,13 +40,31 @@ export function CookingPanel({ onAddIngredients, onFinish, onVoicePressIn, onVoi
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.container}>
       <CurrentStep />
       <CheckpointLog />
+
+      {showNotes && (
+        <View style={styles.notesContainer}>
+          <TextInput
+            style={styles.notesInput}
+            value={cookingNotes}
+            onChangeText={setCookingNotes}
+            placeholder="Add modifications or notes…"
+            placeholderTextColor="rgba(255,255,255,0.3)"
+            multiline
+            autoFocus
+          />
+        </View>
+      )}
+
       <View style={styles.controls}>
         <View style={styles.topRow}>
           <VoiceOrb onPressIn={onVoicePressIn} onPressOut={onVoicePressOut} />
-          <Pressable style={[styles.pauseBtn, isPaused && styles.pauseBtnActive]} onPress={togglePause}>
+          <Pressable style={[styles.iconBtn, showNotes && styles.iconBtnActive]} onPress={() => setShowNotes(!showNotes)}>
+            <Ionicons name="pencil" size={20} color="white" />
+          </Pressable>
+          <Pressable style={[styles.iconBtn, isPaused && styles.iconBtnPaused]} onPress={togglePause}>
             <Ionicons name={isPaused ? "play" : "pause"} size={20} color="white" />
           </Pressable>
         </View>
@@ -56,7 +79,7 @@ export function CookingPanel({ onAddIngredients, onFinish, onVoicePressIn, onVoi
           </Pressable>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -64,6 +87,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     gap: 4,
+  },
+  notesContainer: {
+    marginHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  notesInput: {
+    color: "white",
+    fontSize: 14,
+    padding: 12,
+    minHeight: 72,
+    lineHeight: 20,
   },
   controls: {
     alignItems: "center",
@@ -73,9 +110,9 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
   },
-  pauseBtn: {
+  iconBtn: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -83,7 +120,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pauseBtnActive: {
+  iconBtnActive: {
+    backgroundColor: "#3b82f6",
+  },
+  iconBtnPaused: {
     backgroundColor: "#eab308",
   },
   actions: {

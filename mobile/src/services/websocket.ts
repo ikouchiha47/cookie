@@ -24,7 +24,20 @@ export class WebSocketService {
   }
 
   setUrl(url: string) {
+    if (this.url === url) return;
     this.url = url;
+    // Reconnect with the new URL
+    if (this.ws) {
+      this.shouldReconnect = false;
+      this.ws.close();
+      this.ws = null;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.shouldReconnect = true;
+    this.connect();
   }
 
   onMessage(handler: MessageHandler) {
@@ -107,4 +120,6 @@ export class WebSocketService {
 }
 
 /** Singleton instance */
-export const wsService = new WebSocketService("ws://localhost:8420/ws");
+export const wsService = new WebSocketService(
+  process.env.EXPO_PUBLIC_WS_URL ?? "ws://localhost:8420/ws"
+);

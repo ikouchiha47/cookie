@@ -11,6 +11,21 @@ export type InterruptType = "voice" | "button";
 
 // --- Edge → Server Messages ---
 
+export interface SessionContext {
+  session_id: string;
+  epoch: number;        // bumped on: recipe selected, phase change, step advance
+  phase: "discovery" | "cooking" | "paused";
+  current_step: number;
+  step_instruction: string;
+  expected_visual_state: string;
+  expected_texture: string;
+  expected_taste_smell: string;
+  watch_for: string;
+  criticality: "low" | "medium" | "high";
+  recipe_title: string;
+  discovered_items: string[];
+}
+
 export interface FrameMessage {
   timestamp: number;
   frame_bytes: string; // base64
@@ -30,6 +45,10 @@ export interface UserInterrupt {
 }
 
 // --- Server → Edge Messages ---
+
+export interface SessionInitMessage {
+  session_id: string;
+}
 
 export interface GuidanceMessage {
   text: string;
@@ -92,6 +111,8 @@ export interface RecipeStep {
   common_mistakes: CommonMistake[];
   safety_thresholds: Record<string, string>;
   expected_visual_state: string;
+  expected_texture?: string;
+  expected_taste_smell?: string;
 }
 
 export interface RecipePlan {

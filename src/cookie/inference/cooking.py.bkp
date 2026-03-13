@@ -8,6 +8,7 @@ import logging
 import dspy
 from PIL import Image
 
+from cookie.inference.modules import CookingAgent
 from cookie.models import CookingObservation, GuidanceMessage, SessionContext, Severity, StepUpdate, StepStatus
 from cookie.transport.ws_server import ClientSession
 
@@ -19,7 +20,7 @@ async def run_cooking(
     context: SessionContext,
     client: ClientSession,
     lm: dspy.LM,
-    observe_sig: dspy.ChainOfThought,
+    agent: "CookingAgent",
 ) -> CookingObservation:
     try:
         img = Image.open(io.BytesIO(frame))
@@ -28,11 +29,13 @@ async def run_cooking(
         image = dspy.Image(buf.getvalue())
 
         with dspy.context(lm=lm):
-            result = observe_sig(
+            result = agent(
                 image=image,
                 recipe_title=context.recipe_title,
                 step_instruction=context.step_instruction,
                 expected_visual_state=context.expected_visual_state,
+                expected_texture=context.expected_texture,
+                expected_taste_smell=context.expected_taste_smell,
                 watch_for=context.watch_for,
             )
 

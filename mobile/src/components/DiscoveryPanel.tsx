@@ -5,31 +5,30 @@ import { useSessionStore } from "../stores/session";
 import { wsService } from "../services/websocket";
 
 interface Props {
-  onScan: () => Promise<void>;
-  onStopScan: () => void;
-  isAutoScanning: boolean;
+  cameraMode: "off" | "snap" | "streaming" | "paused";
+  onSnap: () => void;
+  onSnapSend: () => Promise<void>;
+  onStream: () => Promise<void>;
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
 }
 
-export function DiscoveryPanel({ onScan, onStopScan, isAutoScanning }: Props) {
+export function DiscoveryPanel({ cameraMode, onSnap, onSnapSend, onStream, onPause, onResume, onStop }: Props) {
   const discoveredItems = useSessionStore((s) => s.discoveredItems);
   const recipeSuggestions = useSessionStore((s) => s.recipeSuggestions);
   const chatLoading = useSessionStore((s) => s.chatLoading);
-  const selecting = useRef(false);
-  const scanning = useRef(false);
+  const clearDiscovery = useSessionStore((s) => s.clearDiscovery);
+  const acting = useRef(false);
 
-  const handleScan = async () => {
-    if (scanning.current || chatLoading) return;
-    scanning.current = true;
-    try {
-      await onScan();
-    } finally {
-      scanning.current = false;
-    }
+  const wrap = (fn: () => Promise<void> | void) => async () => {
+    if (acting.current || chatLoading) return;
+    acting.current = true;
+    try { await fn(); } finally { acting.current = false; }
   };
 
   const selectRecipe = (name: string, description: string) => {
-    if (selecting.current || chatLoading) return;
-    selecting.current = true;
+    if (chatLoading) return;
     const msg = `Let's make ${name}:\n${description}`;
     useSessionStore.getState().addChatMessage("user", msg);
     useSessionStore.getState().setChatLoading(true);
@@ -40,7 +39,12 @@ export function DiscoveryPanel({ onScan, onStopScan, isAutoScanning }: Props) {
     <View style={styles.container}>
       {discoveredItems.length > 0 && (
         <View style={styles.itemsRow}>
-          <Text style={styles.label}>I CAN SEE</Text>
+          <View style={styles.itemsHeader}>
+            <Text style={styles.label}>I CAN SEE</Text>
+            <Pressable onPress={clearDiscovery} style={styles.clearBtn}>
+              <Text style={styles.clearBtnText}>Clear</Text>
+            </Pressable>
+          </View>
           <Text style={styles.items} numberOfLines={2}>
             {discoveredItems.join(", ")}
           </Text>
@@ -65,35 +69,60 @@ export function DiscoveryPanel({ onScan, onStopScan, isAutoScanning }: Props) {
         </ScrollView>
       )}
 
-      {discoveredItems.length === 0 && !isAutoScanning && (
+      {discoveredItems.length === 0 && cameraMode === "off" && (
         <Text style={styles.hint}>point camera at your ingredients</Text>
       )}
 
-      <View style={styles.btnRow}>
-        {/* Scan / scanning indicator */}
-        <Pressable
-          style={[styles.scanBtn, chatLoading && styles.scanBtnDisabled]}
-          onPress={handleScan}
-          disabled={chatLoading}
-        >
-          {chatLoading ? (
-            <ActivityIndicator color="white" size="small" />
-          ) : (
-            <Ionicons name="camera" size={20} color="white" />
-          )}
-          <Text style={styles.scanBtnText}>
-            {chatLoading ? "Thinking…" : "Scan"}
-          </Text>
-        </Pressable>
-
-        {/* Stop auto-scan */}
-        {isAutoScanning && (
-          <Pressable style={styles.stopBtn} onPress={onStopScan}>
-            <Ionicons name="stop" size={18} color="rgba(255,255,255,0.7)" />
-            <Text style={styles.stopBtnText}>Stop</Text>
+      {/* Button bar */}
+      {cameraMode === "off" && (
+        <View style={styles.btnRow}>
+          <Pressable style={styles.vertBtn} onPress={onSnap}>
+            <Ionicons name="camera" size={40} color="white" />
+            <Text style={styles.vertBtnTextLg}>Snap</Text>
           </Pressable>
-        )}
-      </View>
+          <Pressable style={styles.vertBtn} onPress={wrap(onStream)}>
+            <Ionicons name="videocam" size={40} color="white" />
+            <Text style={styles.vertBtnTextLg}>Stream</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {cameraMode === "snap" && (
+        <View style={styles.btnRow}>
+          <Pressable style={styles.vertBtn} onPress={() => {}}>
+            <Ionicons name="images-outline" size={28} color="rgba(255,255,255,0.5)" />
+          </Pressable>
+          <Pressable
+            style={[styles.vertBtnPrimary, chatLoading && styles.btnDisabled]}
+            onPress={wrap(onSnapSend)}
+            disabled={chatLoading}
+          >
+            {chatLoading
+              ? <ActivityIndicator color="white" size="small" />
+              : <Ionicons name="camera" size={36} color="white" />}
+          </Pressable>
+          <Pressable style={styles.vertBtn} onPress={wrap(onStream)}>
+            <Ionicons name="videocam" size={28} color="rgba(255,255,255,0.7)" />
+          </Pressable>
+        </View>
+      )}
+
+      {(cameraMode === "streaming" || cameraMode === "paused") && (
+        <View style={styles.btnRow}>
+          <Pressable style={styles.vertBtn} onPress={wrap(onSnapSend)} disabled={chatLoading}>
+            <Ionicons name="camera" size={28} color={chatLoading ? "rgba(255,255,255,0.3)" : "white"} />
+          </Pressable>
+          <Pressable
+            style={styles.vertBtnPrimary}
+            onPress={cameraMode === "streaming" ? onPause : wrap(onStream)}
+          >
+            <Ionicons name={cameraMode === "streaming" ? "pause" : "play"} size={36} color="white" />
+          </Pressable>
+          <Pressable style={styles.vertBtn} onPress={onStop}>
+            <Ionicons name="stop-circle-outline" size={28} color="rgba(255,255,255,0.7)" />
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -107,6 +136,24 @@ const styles = StyleSheet.create({
   itemsRow: {
     alignItems: "center",
     gap: 4,
+  },
+  itemsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  clearBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  clearBtnText: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 0.5,
   },
   label: {
     color: "rgba(255,255,255,0.45)",
@@ -128,7 +175,7 @@ const styles = StyleSheet.create({
   },
   suggestions: {
     width: "100%",
-    maxHeight: 180,
+    maxHeight: 260,
     paddingHorizontal: 16,
   },
   card: {
@@ -162,39 +209,42 @@ const styles = StyleSheet.create({
   },
   btnRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: 24,
     alignItems: "center",
+    paddingHorizontal: 24,
   },
-  scanBtn: {
-    flexDirection: "row",
+  vertBtn: {
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#22c55e",
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 28,
+    gap: 4,
+    minWidth: 56,
   },
-  scanBtnDisabled: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-  },
-  scanBtnText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  stopBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-  stopBtnText: {
+  vertBtnText: {
     color: "rgba(255,255,255,0.7)",
-    fontSize: 16,
+    fontSize: 11,
     fontWeight: "500",
+    textAlign: "center",
+  },
+  vertBtnTextLg: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  vertBtnPrimary: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#22c55e",
+    borderRadius: 36,
+    width: 72,
+    height: 72,
+  },
+  vertBtnPrimaryText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  btnDisabled: {
+    backgroundColor: "rgba(255,255,255,0.15)",
   },
 });

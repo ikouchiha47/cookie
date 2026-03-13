@@ -1,11 +1,12 @@
 import React from "react";
-import { View, Text, StyleSheet, FlatList } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useSessionStore, type CheckpointItem } from "../stores/session";
 
-const ICONS: Record<CheckpointItem["type"], string> = {
-  success: "\u2705",
-  warning: "\u26a0\ufe0f",
-  fix: "\ud83d\udd27",
+const ICONS: Record<CheckpointItem["type"], { name: string; color: string }> = {
+  success: { name: "checkmark-circle", color: "#22c55e" },
+  warning: { name: "warning",          color: "#eab308" },
+  fix:     { name: "build",            color: "#ef4444" },
 };
 
 export function CheckpointLog() {
@@ -16,14 +17,15 @@ export function CheckpointLog() {
 
   return (
     <View style={styles.container}>
-      {visible.map((cp) => (
-        <View key={cp.id} style={styles.row}>
-          <Text style={styles.icon}>{ICONS[cp.type]}</Text>
-          <Text style={styles.text} numberOfLines={1}>
-            {cp.text}
-          </Text>
-        </View>
-      ))}
+      {visible.map((cp) => {
+        const icon = ICONS[cp.type];
+        return (
+          <View key={cp.id} style={styles.row}>
+            <Ionicons name={icon.name as any} size={14} color={icon.color} />
+            <Text style={styles.text} numberOfLines={1}>{cp.text}</Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -38,9 +40,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-  },
-  icon: {
-    fontSize: 14,
   },
   text: {
     color: "rgba(255,255,255,0.7)",

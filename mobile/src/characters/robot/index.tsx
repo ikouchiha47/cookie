@@ -220,14 +220,6 @@ export function RobotCharacter({ params, size }: CharacterComponentProps) {
     return { d: `M ${x1} ${MY} Q ${MOUTH_CX} ${ctrlY + openDip} ${x2} ${MY} Z` };
   });
 
-  const leftHighlightProps = useAnimatedProps(() => ({
-    cx: L_EYE_CX + eyeXShift.value * 1.5 - 1.5,
-    cy: L_EYE_CY + eyeYShift.value * -5 - 2,
-  }));
-  const rightHighlightProps = useAnimatedProps(() => ({
-    cx: R_EYE_CX + eyeXShift.value * 1.5 - 1.5,
-    cy: R_EYE_CY + eyeYShift.value * -5 - 2,
-  }));
 
   const antGlowProps = useAnimatedProps(() => ({
     r: 3.5 * antScale.value,
@@ -293,10 +285,6 @@ export function RobotCharacter({ params, size }: CharacterComponentProps) {
               <FeGaussianBlur stdDeviation="1.5" result="blur" />
               <FeMerge><FeMergeNode in="blur" /><FeMergeNode in="SourceGraphic" /></FeMerge>
             </Filter>
-            <Filter id="antGlow" x="-100%" y="-100%" width="300%" height="300%">
-              <FeGaussianBlur stdDeviation="1.2" result="blur" />
-              <FeMerge><FeMergeNode in="blur" /><FeMergeNode in="SourceGraphic" /></FeMerge>
-            </Filter>
           </Defs>
 
           <G transform={ROOT_T}>
@@ -328,14 +316,13 @@ export function RobotCharacter({ params, size }: CharacterComponentProps) {
 
             {/* ── Signal orb glow + orb ── */}
             <AnimatedCircle cx={ORB_CX} cy={ORB_CY} fill={antGlowColor} animatedProps={antGlowProps} />
-            <Circle cx={ORB_CX} cy={ORB_CY} r={5.07} fill={antOrbColor} stroke="#000" strokeWidth={1} filter="url(#antGlow)" />
+            <Circle cx={ORB_CX} cy={ORB_CY} r={6} fill={antOrbColor} />
             <Circle cx={ORB_CX - 1.5} cy={ORB_CY - 1.5} r={1.5} fill="rgba(255,255,255,0.45)" />
 
             {/* ── Eyes ── */}
             <AnimatedEllipse cx={L_EYE_CX} cy={L_EYE_CY} rx={EYE_RX} ry={EYE_RY} fill={eyeColor} animatedProps={leftEyeProps} />
             <AnimatedEllipse cx={R_EYE_CX} cy={R_EYE_CY} rx={EYE_RX} ry={EYE_RY} fill={eyeColor} animatedProps={rightEyeProps} />
-            <AnimatedEllipse cx={L_EYE_CX} cy={L_EYE_CY} rx={EYE_RX * 0.35} ry={EYE_RY * 0.3} fill="rgba(255,255,255,0.5)" animatedProps={leftHighlightProps} />
-            <AnimatedEllipse cx={R_EYE_CX} cy={R_EYE_CY} rx={EYE_RX * 0.35} ry={EYE_RY * 0.3} fill="rgba(255,255,255,0.5)" animatedProps={rightHighlightProps} />
+            {/* eye highlights removed — to be handled via Inkscape layer */}
 
             {/* ── Brows ── */}
             <Path d={lBrowD} stroke={browColor} strokeWidth={browW} strokeLinecap="round" fill="none" />

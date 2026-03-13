@@ -8,6 +8,7 @@ import logging
 import dspy
 from PIL import Image
 
+from cookie.inference.modules import DiscoveryAgent
 from cookie.models import DiscoveryMessage, RecipeSuggestion, SessionContext
 from cookie.transport.ws_server import ClientSession
 
@@ -19,7 +20,7 @@ async def run_discovery(
     context: SessionContext,
     client: ClientSession,
     lm: dspy.LM,
-    discover_sig: dspy.ChainOfThought,
+    agent: "DiscoveryAgent",
 ) -> None:
     await client.send_thinking()
     try:
@@ -29,7 +30,7 @@ async def run_discovery(
         image = dspy.Image(buf.getvalue())
 
         with dspy.context(lm=lm):
-            result = discover_sig(image=image, user_hint="")
+            result = agent(image=image, user_hint="")
 
         items = result.ingredients or []
         if not items:

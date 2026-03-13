@@ -50,6 +50,7 @@ export interface SessionStore {
   isActive: boolean;
   startSession: () => void;
   endSession: () => void;
+  setSessionId: (id: string) => void;
   initFromDb: () => Promise<{ resumed: boolean; sessionId: string | null }>;
   persistSession: () => void;
 
@@ -68,12 +69,16 @@ export interface SessionStore {
   updateStep: (index: number, status: StepStatus) => void;
 
   // Phase / vigilance (sent to server with every frame — client is source of truth)
+  epoch: number; // bumped on: recipe selected, phase change, step advance
   phase: "discovery" | "cooking" | "paused" | "done";
   currentStep: number;
   stepInstruction: string;
   expectedVisualState: string;
+  expectedTexture: string;
+  expectedTasteSmell: string;
   watchFor: string;
   criticality: "low" | "medium" | "high";
+  bumpEpoch: () => void;
   setPhase: (p: "discovery" | "cooking" | "paused" | "done") => void;
   setVigilance: (watchFor: string, criticality: "low" | "medium" | "high") => void;
   setCurrentStep: (step: number, instruction: string, expectedVisualState: string) => void;
@@ -82,6 +87,7 @@ export interface SessionStore {
   discoveredItems: string[];
   recipeSuggestions: RecipeSuggestion[];
   handleDiscovery: (msg: DiscoveryMessage) => void;
+  clearDiscovery: () => void;
 
   // Guidance
   latestGuidance: GuidanceMessage | null;
@@ -102,8 +108,14 @@ export interface SessionStore {
   setSpeaking: (v: boolean) => void;
 
   // Camera
-  isCameraActive: boolean;
-  setCameraActive: (v: boolean) => void;
+  cameraMode: "off" | "snap" | "streaming" | "paused";
+  cameraExpanded: boolean;
+  setCameraMode: (m: "off" | "snap" | "streaming" | "paused") => void;
+  setCameraExpanded: (v: boolean) => void;
+
+  // Cooking notes / modifications (accumulated during session)
+  cookingNotes: string;
+  setCookingNotes: (notes: string) => void;
 
   // User profile
   userProfile: UserProfile;
@@ -116,6 +128,9 @@ export interface SessionStore {
   markMessageFailed: (id: string) => void;
   setChatLoading: (v: boolean) => void;
   handleChatResponse: (msg: ChatResponse) => void;
+
+  // Abort
+  handleAbort: () => void;
 
   // Idle tracking
   lastActivityAt: number;
@@ -150,17 +165,20 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       recipeSuggestions: [],
       expression: "default",
       phase: "discovery",
+      cameraMode: "off",
       currentStep: 0,
       stepInstruction: "",
       expectedVisualState: "",
       watchFor: "",
       criticality: "medium",
+      cookingNotes: "",
     }),
   endSession: () => {
     const { sessionId } = get();
     if (sessionId) markSessionDone(sessionId).catch(() => {});
-    set({ isActive: false, phase: "done" });
+    set({ isActive: false, phase: "done", cameraMode: "off" });
   },
+  setSessionId: (id) => set({ sessionId: id }),
 
   initFromDb: async () => {
     const row = await loadLatestIncompleteSession();
@@ -218,15 +236,19 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   stepTimerStart: null,
   setRecipePlan: (plan) => {
     const first = plan.steps[0];
-    set({
+    set((s) => ({
       recipePlan: plan,
+      epoch: s.epoch + 1, // recipe selected — invalidate in-flight discovery frames
       phase: "cooking",
+      cameraMode: "streaming",
       currentStep: 0,
       stepInstruction: first?.instruction ?? "",
       expectedVisualState: first?.expected_visual_state ?? "",
+      expectedTexture: first?.expected_texture ?? "",
+      expectedTasteSmell: first?.expected_taste_smell ?? "",
       watchFor: "",
       criticality: "medium",
-    });
+    }));
     get().persistSession();
   },
   updateStep: (index, status) => {
@@ -237,6 +259,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     if (status === "active") {
       updates.currentStepIndex = index;
       updates.stepTimerStart = Date.now();
+      updates.epoch = get().epoch + 1; // step advance — invalidate in-flight observations
     }
     if (status === "done") {
       const plan = get().recipePlan;
@@ -246,6 +269,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         updates.currentStep = index + 1;
         updates.stepInstruction = next.instruction;
         updates.expectedVisualState = next.expected_visual_state ?? "";
+        updates.expectedTexture = next.expected_texture ?? "";
+        updates.expectedTasteSmell = next.expected_taste_smell ?? "";
         updates.watchFor = "";
         updates.criticality = "medium";
         updates.stepTimerStart = Date.now();
@@ -257,13 +282,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   // Phase / vigilance
+  epoch: 0,
   phase: "discovery",
   currentStep: 0,
   stepInstruction: "",
   expectedVisualState: "",
+  expectedTexture: "",
+  expectedTasteSmell: "",
   watchFor: "",
   criticality: "medium",
-  setPhase: (p) => set({ phase: p }),
+  bumpEpoch: () => set((s) => ({ epoch: s.epoch + 1 })),
+  setPhase: (p) => set((s) => ({ phase: p, epoch: s.epoch + 1 })),
   setVigilance: (watchFor, criticality) => {
     set({ watchFor, criticality });
     get().persistSession();
@@ -275,14 +304,21 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   discoveredItems: [],
   recipeSuggestions: [],
   handleDiscovery: (msg) => {
-    set({
-      discoveredItems: msg.items,
-      recipeSuggestions: msg.suggestions,
-      expression: "default",
+    set((s) => ({
+      discoveredItems: Array.from(new Set([...s.discoveredItems, ...msg.items])),
+      recipeSuggestions: [
+        ...msg.suggestions.filter(
+          (n) => !s.recipeSuggestions.some((e) => e.name === n.name)
+        ),
+        ...s.recipeSuggestions,
+      ],
+      expression: "happy",
       lastActivityAt: Date.now(),
-    });
+      chatLoading: false,
+    }));
     get().addTranscript("system", `Discovered: ${msg.items.join(", ")}`);
   },
+  clearDiscovery: () => set({ discoveredItems: [], recipeSuggestions: [] }),
 
   // Guidance
   latestGuidance: null,
@@ -329,8 +365,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   setSpeaking: (v) => set({ isSpeaking: v }),
 
   // Camera
-  isCameraActive: false,
-  setCameraActive: (v) => set({ isCameraActive: v }),
+  cameraMode: "off" as "off" | "snap" | "streaming" | "paused",
+  cameraExpanded: true,
+  setCameraMode: (m) => set({ cameraMode: m, ...(m !== "off" ? { cameraExpanded: true } : {}) }),
+  setCameraExpanded: (v) => set({ cameraExpanded: v }),
+
+  // Cooking notes
+  cookingNotes: "",
+  setCookingNotes: (notes) => set({ cookingNotes: notes }),
 
   // User profile
   userProfile: {
@@ -378,10 +420,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           ...base,
           recipePlan: newPlan,
           phase: "cooking" as const,
+          cameraMode: "streaming" as const,
+          epoch: s.epoch + 1, // phase transition — invalidate in-flight discovery frames
           currentStep: 0,
           currentStepIndex: 0,
           stepInstruction: first?.instruction ?? "",
           expectedVisualState: first?.expected_visual_state ?? "",
+          expectedTexture: first?.expected_texture ?? "",
+          expectedTasteSmell: first?.expected_taste_smell ?? "",
           watchFor: "",
           criticality: "medium" as const,
         };
@@ -390,6 +436,36 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       return { ...base, recipePlan: newPlan ?? s.recipePlan };
     });
   },
+
+  // Abort — reset to clean idle state, no persistence
+  handleAbort: () =>
+    set({
+      isActive: false,
+      sessionId: null,
+      sessionStartedAt: null,
+      phase: "discovery",
+      cameraMode: "off",
+      cameraExpanded: true,
+      recipePlan: null,
+      currentStep: 0,
+      currentStepIndex: 0,
+      stepStatuses: {},
+      stepInstruction: "",
+      expectedVisualState: "",
+      expectedTexture: "",
+      expectedTasteSmell: "",
+      watchFor: "",
+      criticality: "medium",
+      latestGuidance: null,
+      checkpoints: [],
+      transcript: [],
+      chatMessages: [],
+      chatLoading: false,
+      discoveredItems: [],
+      recipeSuggestions: [],
+      expression: "default",
+      epoch: 0,
+    }),
 
   // Idle
   lastActivityAt: Date.now(),

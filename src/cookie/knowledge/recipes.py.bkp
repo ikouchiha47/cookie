@@ -35,6 +35,8 @@ class RecipeGenerator:
                     quantities=quantities,
                     duration_seconds=s.duration_seconds,
                     expected_visual_state=s.expected_visual_state,
+                    expected_texture=s.expected_texture,
+                    expected_taste_smell=s.expected_taste_smell,
                 ))
 
             return RecipePlan(

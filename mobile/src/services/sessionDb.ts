@@ -35,6 +35,19 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   await _db.execAsync("PRAGMA synchronous = NORMAL;"); // safe with WAL
 
   await _db.execAsync(`
+    CREATE TABLE IF NOT EXISTS saved_recipes (
+      id            TEXT PRIMARY KEY,
+      session_id    TEXT NOT NULL,
+      title         TEXT NOT NULL,
+      recipe_json   TEXT NOT NULL,
+      modifications TEXT NOT NULL DEFAULT '',
+      rating        INTEGER,
+      notes         TEXT NOT NULL DEFAULT '',
+      saved_at      INTEGER NOT NULL
+    );
+  `);
+
+  await _db.execAsync(`
     CREATE TABLE IF NOT EXISTS sessions (
       session_id            TEXT PRIMARY KEY,
       phase                 TEXT NOT NULL DEFAULT 'discovery',
@@ -117,6 +130,37 @@ export async function markSessionDone(session_id: string): Promise<void> {
   await db.runAsync(
     `UPDATE sessions SET phase = 'done', updated_at = ? WHERE session_id = ?;`,
     [Date.now(), session_id]
+  );
+}
+
+export interface SavedRecipeRow {
+  id: string;
+  session_id: string;
+  title: string;
+  recipe_json: string;
+  modifications: string;
+  rating: number | null;
+  notes: string;
+  saved_at: number;
+}
+
+export async function saveRecipe(row: Omit<SavedRecipeRow, "id" | "saved_at">): Promise<string> {
+  const db = await getDb();
+  const id = `recipe_${Date.now()}`;
+  const saved_at = Date.now();
+  await db.runAsync(
+    `INSERT INTO saved_recipes (id, session_id, title, recipe_json, modifications, rating, notes, saved_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+    [id, row.session_id, row.title, row.recipe_json, row.modifications, row.rating ?? null, row.notes, saved_at]
+  );
+  return id;
+}
+
+export async function listSavedRecipes(limit = 50): Promise<SavedRecipeRow[]> {
+  const db = await getDb();
+  return db.getAllAsync<SavedRecipeRow>(
+    `SELECT * FROM saved_recipes ORDER BY saved_at DESC LIMIT ?;`,
+    [limit]
   );
 }
 

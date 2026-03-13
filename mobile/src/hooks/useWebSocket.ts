@@ -3,9 +3,9 @@
 import { useEffect, useRef } from "react";
 import { wsService } from "../services/websocket";
 import { useSessionStore } from "../stores/session";
-import type { ChatResponse, DiscoveryMessage, Envelope, GuidanceMessage, StepUpdate, RecipePlan } from "../types/protocol";
+import type { ChatResponse, DiscoveryMessage, Envelope, GuidanceMessage, StepUpdate, RecipePlan, SessionInitMessage } from "../types/protocol";
 
-export function useWebSocket() {
+export function useWebSocket(onAbort?: () => void) {
   const serverUrl = useSessionStore((s) => s.serverUrl);
   const setConnectionStatus = useSessionStore((s) => s.setConnectionStatus);
   const handleGuidance = useSessionStore((s) => s.handleGuidance);
@@ -15,6 +15,8 @@ export function useWebSocket() {
   const setRecipePlan = useSessionStore((s) => s.setRecipePlan);
   const setExpression = useSessionStore((s) => s.setExpression);
   const setVigilance = useSessionStore((s) => s.setVigilance);
+  const handleAbort = useSessionStore((s) => s.handleAbort);
+  const setSessionId = useSessionStore((s) => s.setSessionId);
   const isActive = useSessionStore((s) => s.isActive);
   const started = useRef(false);
 
@@ -24,6 +26,9 @@ export function useWebSocket() {
   }, [serverUrl]);
 
   useEffect(() => {
+    // Sync immediately in case ws was already connected before this hook mounted (e.g. hot reload)
+    setConnectionStatus(wsService.isConnected ? "connected" : "disconnected");
+
     wsService.onStatusChange = (status) => {
       setConnectionStatus(status);
       if (status === "disconnected") setExpression("default");
@@ -62,15 +67,25 @@ export function useWebSocket() {
           if (obs.expression) setExpression(obs.expression as any);
           break;
         }
+        case "session_init": {
+          const msg = envelope.payload as unknown as SessionInitMessage;
+          setSessionId(msg.session_id);
+          break;
+        }
         case "thinking": {
           setExpression("default");
+          break;
+        }
+        case "aborted": {
+          onAbort?.();   // stop camera/audio side effects in the screen
+          handleAbort(); // reset store
           break;
         }
       }
     });
 
     return unsub;
-  }, [handleGuidance, handleDiscovery, handleChatResponse, updateStep, setRecipePlan, setExpression, setConnectionStatus]);
+  }, [handleGuidance, handleDiscovery, handleChatResponse, updateStep, setRecipePlan, setExpression, setConnectionStatus, handleAbort, setSessionId]);
 
 
   return { send: wsService.send.bind(wsService) };

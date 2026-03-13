@@ -352,3 +352,20 @@ DSPy exceptions are caught at the handler level — check server logs for `Chat 
 3. **Check both sides of the wire.** A bug that looks like a UI problem is often a type mismatch in the payload — compare `models.py` to `protocol.ts`.
 4. **Run the harness** to validate server-side reasoning changes without needing the mobile app.
 5. **Test with batch screenshots** (see §4) to validate vision + chat changes in isolation.
+
+---
+
+## 10. **DEVELOPMENT SPEED UP**
+
+After data-gathering, and planning for a task, inorder to come up with an implementation strategy:
+
+Adopt a sort of **fork-join** model to parallely complete tasks.
+
+In order to do so:
+
+- Figure out which parts need to be sequentially executed and which can be parallelized
+- There can be nested groups of parallel and sequential tasks, like a workflow manager like orkes.
+- Break down into proper interfaces for allowing parallel development.
+- Sometimes parts of solutions, like interfaces and abstractions need to be built out first. In such a case, pass as much data needed in contest for the sub plan executor, to independently assume the presence of the interface and do the rest of work.
+- For scenarios involving shared data models, interfaces, connection, would need tp be built first. Internally this group of task can be parallel, but the core building and implementation sub tasks are sequential, whereaas the sub tasks can be groups of sequential and parallel sub tasks.
+

@@ -50,12 +50,20 @@ class InterruptType(str, Enum):
 # --- Edge → Server Messages ---
 
 class SessionContext(BaseModel):
-    """Client-owned session state sent with every frame. Server is stateless."""
+    """Client-owned session state sent with every message. Server is stateless.
+
+    epoch: monotonically incrementing integer, bumped by the client on every
+    significant state transition — recipe selected, phase change, step advance.
+    Server discards messages and responses whose epoch is stale.
+    """
     session_id: str = "default"
+    epoch: int = 0
     phase: Literal["discovery", "cooking", "paused"] = "discovery"
     current_step: int = 0
     step_instruction: str = ""
     expected_visual_state: str = ""
+    expected_texture: str = ""
+    expected_taste_smell: str = ""
     watch_for: str = ""
     criticality: Literal["low", "medium", "high"] = "medium"
     recipe_title: str = ""
@@ -148,6 +156,8 @@ class RecipeStep(BaseModel):
     common_mistakes: list[CommonMistake] = Field(default_factory=list)
     safety_thresholds: dict[str, str] = Field(default_factory=dict)
     expected_visual_state: str = ""
+    expected_texture: str = ""
+    expected_taste_smell: str = ""
 
 
 class RecipePlan(BaseModel):
@@ -202,9 +212,11 @@ class SessionState(BaseModel):
 
 class CharacterState(BaseModel):
     """Character emotional and physical state, driven by LLM reasoning."""
-    expression: Literal["happy", "thinking", "concerned", "alert", "sleeping", "neutral"] = "neutral"
-    antenna_light: Literal["idle", "thinking", "alert", "error"] = "idle"
-    emotion: Literal["excited", "focused", "worried", "confused", "neutral"] = "neutral"
+    expression: Literal[
+        "default", "idle", "happy", "confused", "sad",
+        "angry", "embarrassed", "wink", "concerned", "excited",
+    ] = "default"
+    antenna_light: Literal["idle", "excited", "alert", "error"] = "idle"
     arm_pose: Literal["neutral", "pointing", "wave", "celebrate"] = "neutral"
     arm_left_rotation: float = 0   # degrees, clamped -30 to 30
     arm_right_rotation: float = 0  # degrees, clamped -30 to 30

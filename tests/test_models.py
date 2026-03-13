@@ -2,13 +2,13 @@
 
 from cookie.models import (
     Envelope,
-    FrameMessage,
     GuidanceMessage,
     RecipePlan,
     RecipeStep,
-    SessionState,
     Severity,
-    VesselState,
+    SessionContext,
+    DiscoveryMessage,
+    RecipeSuggestion,
 )
 
 
@@ -21,13 +21,6 @@ def test_envelope_roundtrip():
     assert restored.payload["text"] == "Keep stirring"
 
 
-def test_session_state_defaults():
-    state = SessionState()
-    assert state.current_step == 0
-    assert state.vessel_state.ingredients == {}
-    assert state.action_log == []
-
-
 def test_recipe_plan():
     plan = RecipePlan(
         title="Hot Chocolate",
@@ -38,6 +31,8 @@ def test_recipe_plan():
                 quantities={"milk": "2 cups"},
                 duration_seconds=180,
                 expected_visual_state="milk in pot, steam rising",
+                expected_texture="warm to touch",
+                expected_taste_smell="faint milky aroma",
             ),
             RecipeStep(
                 index=1,
@@ -48,12 +43,22 @@ def test_recipe_plan():
     )
     assert len(plan.steps) == 2
     assert plan.steps[0].quantities["milk"] == "2 cups"
+    assert plan.steps[0].expected_texture == "warm to touch"
 
 
-def test_vessel_state():
-    vs = VesselState(
-        ingredients={"milk": "2 cups", "cocoa": "2 tbsp"},
-        total_volume="~500ml",
-        temperature="hot",
+def test_session_context_defaults():
+    ctx = SessionContext()
+    assert ctx.phase == "discovery"
+    assert ctx.current_step == 0
+    assert ctx.recipe_title == ""
+
+
+def test_discovery_message():
+    msg = DiscoveryMessage(
+        items=["eggs", "flour", "butter"],
+        suggestions=[
+            RecipeSuggestion(name="Pancakes", description="Simple breakfast", confidence="high")
+        ],
     )
-    assert vs.ingredients["milk"] == "2 cups"
+    assert len(msg.items) == 3
+    assert msg.suggestions[0].confidence == "high"

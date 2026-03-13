@@ -1,7 +1,7 @@
 /** Hook: Camera frame capture → WS
  *
- * Discovery: on-demand snapshots (scanNow) + 60s auto-fire
- * Cooking:   continuous 1fps sampling for real-time guidance
+ * Discovery: snapNow (2-frame burst) + 60s auto-fire when cameraMode=streaming
+ * Cooking:   criticality-adaptive interval (low=10s, medium=3s, high=1s)
  */
 
 import { useCallback, useEffect, useRef } from "react";
@@ -10,9 +10,14 @@ import { readAsStringAsync } from "expo-file-system/legacy";
 import { wsService } from "../services/websocket";
 import { useSessionStore } from "../stores/session";
 
-const COOKING_INTERVAL_MS = 1000;
 const DISCOVERY_AUTO_MS = 60_000;
-const SCAN_FRAMES = 2;
+const SNAP_FRAMES = 2;
+
+const CRITICALITY_INTERVAL: Record<"low" | "medium" | "high", number> = {
+  low: 10_000,
+  medium: 3_000,
+  high: 1_000,
+};
 
 async function captureFrame(camera: Camera): Promise<string | null> {
   try {
@@ -28,10 +33,13 @@ function buildContext() {
   const s = useSessionStore.getState();
   return {
     session_id: s.sessionId ?? "mock-session",
+    epoch: s.epoch,
     phase: s.phase,
     current_step: s.currentStep,
     step_instruction: s.stepInstruction,
     expected_visual_state: s.expectedVisualState,
+    expected_texture: s.expectedTexture,
+    expected_taste_smell: s.expectedTasteSmell,
     watch_for: s.watchFor,
     criticality: s.criticality,
     recipe_title: s.recipePlan?.title ?? "",
@@ -43,38 +51,47 @@ export function useCamera(cameraRef: React.RefObject<Camera | null>) {
   const cookingInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const discoveryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isCapturing = useRef(false);
-  const autoScanEnabled = useRef(false);
+  const autoFireEnabled = useRef(false);
 
   const sendFrame = useCallback(async () => {
     if (isCapturing.current) return;
     const camera = cameraRef.current;
     if (!camera || !wsService.isConnected) return;
+    if (!useSessionStore.getState().isActive) return;
     isCapturing.current = true;
     try {
       const base64 = await captureFrame(camera);
       if (!base64) return;
-      wsService.send("frame", {
+      const sent = wsService.send("frame", {
         timestamp: Date.now() / 1000,
         frame_bytes: base64,
         frame_hash: "",
         context: buildContext(),
       });
+      if (sent) {
+        useSessionStore.getState().setChatLoading(true);
+        // Safety: clear spinner if server never responds
+        setTimeout(() => useSessionStore.getState().setChatLoading(false), 30_000);
+      }
       useSessionStore.getState().touchActivity();
     } finally {
       isCapturing.current = false;
     }
   }, [cameraRef]);
 
-  const scanNow = useCallback(async () => {
-    for (let i = 0; i < SCAN_FRAMES; i++) {
+  const snapNow = useCallback(async () => {
+    for (let i = 0; i < SNAP_FRAMES; i++) {
       await sendFrame();
-      if (i < SCAN_FRAMES - 1) await new Promise((r) => setTimeout(r, 500));
+      if (i < SNAP_FRAMES - 1) await new Promise((r) => setTimeout(r, 500));
     }
   }, [sendFrame]);
 
-  const startCookingSampling = useCallback(() => {
-    if (cookingInterval.current) return;
-    cookingInterval.current = setInterval(sendFrame, COOKING_INTERVAL_MS);
+  const startCookingSampling = useCallback((criticality: "low" | "medium" | "high") => {
+    if (cookingInterval.current) {
+      clearInterval(cookingInterval.current);
+      cookingInterval.current = null;
+    }
+    cookingInterval.current = setInterval(sendFrame, CRITICALITY_INTERVAL[criticality]);
   }, [sendFrame]);
 
   const stopCookingSampling = useCallback(() => {
@@ -84,21 +101,21 @@ export function useCamera(cameraRef: React.RefObject<Camera | null>) {
     }
   }, []);
 
-  const scheduleAutoScan = useCallback(() => {
-    autoScanEnabled.current = true;
+  const scheduleAutoFire = useCallback(() => {
+    autoFireEnabled.current = true;
     if (discoveryTimer.current) clearTimeout(discoveryTimer.current);
     discoveryTimer.current = setTimeout(async () => {
-      if (!autoScanEnabled.current) return;
-      const { phase, isCameraActive } = useSessionStore.getState();
-      if (phase === "discovery" && isCameraActive) {
-        await scanNow();
-        scheduleAutoScan();
+      if (!autoFireEnabled.current) return;
+      const { phase, cameraMode } = useSessionStore.getState();
+      if (phase === "discovery" && cameraMode === "streaming") {
+        await snapNow();
+        scheduleAutoFire();
       }
     }, DISCOVERY_AUTO_MS);
-  }, [scanNow]);
+  }, [snapNow]);
 
-  const stopAutoScan = useCallback(() => {
-    autoScanEnabled.current = false;
+  const stopAutoFire = useCallback(() => {
+    autoFireEnabled.current = false;
     if (discoveryTimer.current) {
       clearTimeout(discoveryTimer.current);
       discoveryTimer.current = null;
@@ -108,9 +125,9 @@ export function useCamera(cameraRef: React.RefObject<Camera | null>) {
   useEffect(() => {
     return () => {
       stopCookingSampling();
-      stopAutoScan();
+      stopAutoFire();
     };
   }, []);
 
-  return { scanNow, startCookingSampling, stopCookingSampling, scheduleAutoScan, stopAutoScan };
+  return { snapNow, startCookingSampling, stopCookingSampling, scheduleAutoFire, stopAutoFire };
 }
